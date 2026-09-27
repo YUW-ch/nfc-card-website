@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Nav } from "@/components/Nav";
 import { Footer } from "@/components/Footer";
@@ -10,6 +10,7 @@ import { ui } from "@/lib/site";
 import { useT } from "@/lib/i18n";
 import type { L } from "@/lib/locale";
 import { CARD_TYPES } from "@/components/editor/types";
+import { clearSavedCheckout } from "@/components/editor/cart-state";
 
 export type OrderStatus =
   | "PENDING_PAYMENT"
@@ -102,6 +103,12 @@ function Shell({ children }: { children: React.ReactNode }) {
 
 export function OrderSuccess({ result, appUrl }: { result: Result; appUrl: string }) {
   const t = useT();
+
+  // The order exists, so the designer's saved cart has done its job.
+  const ordered = result.state === "ok";
+  useEffect(() => {
+    if (ordered) clearSavedCheckout();
+  }, [ordered]);
 
   if (result.state !== "ok") {
     return (

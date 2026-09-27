@@ -6,9 +6,9 @@ import { apiBase } from "@/lib/catalog";
 // reserves stock and returns a Stripe Checkout URL. Status codes are passed
 // through: 201 { orderId, number, checkoutUrl }, 400 validation, 409 stock.
 
-// The backend caps the body at roughly 600 KB (the logo travels as a data URL).
-// Reject anything clearly larger before forwarding it.
-const MAX_BODY_BYTES = 1024 * 1024;
+// An order carries up to five designs, each with its logo as a data URL. The
+// backend caps the body at 4 MB; reject anything larger before forwarding it.
+const MAX_BODY_BYTES = 4 * 1024 * 1024;
 
 // Per-visitor limit. The backend only sees this server's address (it trusts
 // one proxy hop), so its own limit on this route is a global backstop; this
