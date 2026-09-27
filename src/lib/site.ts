@@ -281,6 +281,117 @@ export const features = [
 // ── Our flagship: the metal NFC business card ─────────────────────────
 // The first products section markets this card on its own. The menu card is
 // showcased separately alongside the editor (see `menuCard` below).
+// ── Page designer showcase (branding, reusable designs, AI translation, dietary labels) ──
+export const studio = {
+  eyebrow: l("Page designer", "Seiten-Designer", "Éditeur de pages", "Editor di pagine"),
+  title: l(
+    "Your restaurant, your look",
+    "Ihr Restaurant, Ihr Look",
+    "Votre restaurant, votre style",
+    "Il tuo ristorante, il tuo stile",
+  ),
+  intro: l(
+    "Every page carries your full branding. Write your menu once, and AI translates it for every guest.",
+    "Jede Seite trägt Ihr komplettes Branding. Schreiben Sie Ihre Speisekarte einmal, die KI übersetzt sie für jeden Gast.",
+    "Chaque page porte toute votre identité visuelle. Rédigez votre menu une fois, l'IA le traduit pour chaque client.",
+    "Ogni pagina porta tutto il tuo branding. Scrivi il menu una volta, l'IA lo traduce per ogni ospite.",
+  ),
+  items: [
+    {
+      key: "branding",
+      title: l("Your full branding", "Ihr komplettes Branding", "Toute votre identité", "Tutto il tuo branding"),
+      body: l(
+        "Logo, cover photo, colours, fonts and corner style. Guests see your restaurant, not a template.",
+        "Logo, Titelbild, Farben, Schriften und Eckenstil. Gäste sehen Ihr Restaurant, keine Vorlage.",
+        "Logo, photo de couverture, couleurs, polices et style des angles. Vos clients voient votre restaurant, pas un modèle.",
+        "Logo, foto di copertina, colori, font e stile degli angoli. Gli ospiti vedono il tuo ristorante, non un modello.",
+      ),
+    },
+    {
+      key: "templates",
+      title: l("Designs you reuse", "Designs zum Wiederverwenden", "Des designs réutilisables", "Design riutilizzabili"),
+      body: l(
+        "Start from a ready-made look or save your own, then apply it to every page in one click.",
+        "Starten Sie mit einem fertigen Look oder speichern Sie Ihren eigenen und übernehmen Sie ihn mit einem Klick auf jede Seite.",
+        "Partez d'un style prêt à l'emploi ou enregistrez le vôtre, puis appliquez-le à chaque page en un clic.",
+        "Parti da uno stile pronto o salva il tuo, poi applicalo a ogni pagina con un clic.",
+      ),
+    },
+    {
+      key: "ai",
+      title: l("AI translation", "KI-Übersetzung", "Traduction par IA", "Traduzione con IA"),
+      body: l(
+        "Type a dish in your language. One click fills in German, French, Italian and English, with Swiss wording and dish names kept intact.",
+        "Tippen Sie ein Gericht in Ihrer Sprache. Ein Klick ergänzt Deutsch, Französisch, Italienisch und Englisch, mit Schweizer Schreibweise und unveränderten Gerichtnamen.",
+        "Saisissez un plat dans votre langue. Un clic ajoute l'allemand, le français, l'italien et l'anglais, avec des tournures suisses et les noms de plats préservés.",
+        "Scrivi un piatto nella tua lingua. Un clic aggiunge tedesco, francese, italiano e inglese, con formulazioni svizzere e i nomi dei piatti intatti.",
+      ),
+    },
+    {
+      key: "dietary",
+      title: l("Vegan, vegetarian, spicy", "Vegan, vegetarisch, scharf", "Végan, végétarien, épicé", "Vegano, vegetariano, piccante"),
+      body: l(
+        "Mark dishes with one tap. Guests spot what suits them at a glance, with a chili scale for the heat.",
+        "Markieren Sie Gerichte mit einem Tap. Gäste sehen auf einen Blick, was zu ihnen passt, mit Chili-Skala für die Schärfe.",
+        "Signalez vos plats d'un simple tap. Vos clients repèrent d'un coup d'œil ce qui leur convient, avec une échelle de piment.",
+        "Segna i piatti con un tap. Gli ospiti vedono subito cosa fa per loro, con una scala di peperoncini per il piccante.",
+      ),
+    },
+  ],
+  demo: {
+    look: l("Look", "Look", "Style", "Stile"),
+    language: l("Language", "Sprache", "Langue", "Lingua"),
+    original: l("Written in German", "Auf Deutsch verfasst", "Rédigé en allemand", "Scritto in tedesco"),
+    translated: l("Translated by AI", "Von KI übersetzt", "Traduit par l'IA", "Tradotto dall'IA"),
+  },
+};
+
+// Demo menu for the page designer showcase. Keyed by menu language (not site
+// language): the visitor switches it to see the AI translation.
+export const studioMenu = {
+  section: { DE: "Hauptgänge", EN: "Mains", FR: "Plats", IT: "Secondi" },
+  vegan: { DE: "Vegan", EN: "Vegan", FR: "Végan", IT: "Vegano" },
+  vegetarian: { DE: "Vegetarisch", EN: "Vegetarian", FR: "Végétarien", IT: "Vegetariano" },
+  dishes: [
+    {
+      name: { DE: "Burrata mit Tomaten", EN: "Burrata with tomatoes", FR: "Burrata aux tomates", IT: "Burrata con pomodori" },
+      desc: {
+        DE: "Cremig, mit Basilikum und Olivenöl",
+        EN: "Creamy, with basil and olive oil",
+        FR: "Crémeuse, au basilic et à l'huile d'olive",
+        IT: "Cremosa, con basilico e olio d'oliva",
+      },
+      price: "16.50",
+      diet: "vegetarian" as const,
+      spicy: 0,
+    },
+    {
+      name: { DE: "Rösti mit Waldpilzen", EN: "Rösti with wild mushrooms", FR: "Rösti aux champignons des bois", IT: "Rösti ai funghi di bosco" },
+      desc: {
+        DE: "Knusprig, mit frischen Kräutern",
+        EN: "Crispy, with fresh herbs",
+        FR: "Croustillant, aux herbes fraîches",
+        IT: "Croccante, con erbe fresche",
+      },
+      price: "24.00",
+      diet: "vegan" as const,
+      spicy: 0,
+    },
+    {
+      name: { DE: "Chili con Carne", EN: "Chili con carne", FR: "Chili con carne", IT: "Chili con carne" },
+      desc: {
+        DE: "Hausgemacht, mit schwarzen Bohnen",
+        EN: "Homemade, with black beans",
+        FR: "Fait maison, aux haricots noirs",
+        IT: "Fatto in casa, con fagioli neri",
+      },
+      price: "22.50",
+      diet: null,
+      spicy: 3,
+    },
+  ],
+};
+
 export const products = [
   {
     name: "NFC Business Card",
@@ -370,6 +481,8 @@ export const pricing = [
       l("Everything in Starter", "Alles aus Starter", "Tout de Starter", "Tutto di Starter"),
       l("Unlimited destination changes", "Unbegrenzte Zieländerungen", "Changements de destination illimités", "Cambi di destinazione illimitati"),
       l("Analytics & review insights", "Analytics und Einblicke in Bewertungen", "Analytics & analyse des avis", "Analisi e insight sulle recensioni"),
+      l("Page designer with your branding", "Seiten-Designer mit Ihrem Branding", "Éditeur de pages à vos couleurs", "Editor di pagine con il tuo branding"),
+      l("AI translation in 4 languages", "KI-Übersetzung in 4 Sprachen", "Traduction IA en 4 langues", "Traduzione IA in 4 lingue"),
       l("Multiple locations", "Mehrere Standorte", "Plusieurs établissements", "Più sedi"),
       l("Priority support", "Priorisierter Support", "Support prioritaire", "Supporto prioritario"),
     ],
@@ -461,6 +574,34 @@ export const faqs = [
       "Auf Wunsch integrieren wir einen QR-Code als Backup.",
       "Sur demande, nous intégrons un QR code de secours.",
       "Su richiesta, aggiungiamo un QR code di riserva.",
+    ),
+  },
+  {
+    q: l(
+      "Can the pages match my branding?",
+      "Passen die Seiten zu meinem Branding?",
+      "Les pages peuvent-elles reprendre mon identité visuelle ?",
+      "Le pagine possono riprendere il mio branding?",
+    ),
+    a: l(
+      "Yes. Upload your logo and a cover photo, pick your colours and fonts, and save the design to reuse it on all your pages.",
+      "Ja. Laden Sie Logo und Titelbild hoch, wählen Sie Farben und Schriften und speichern Sie das Design, um es auf allen Seiten zu verwenden.",
+      "Oui. Importez votre logo et une photo de couverture, choisissez couleurs et polices, puis enregistrez le design pour le réutiliser sur toutes vos pages.",
+      "Sì. Carica logo e foto di copertina, scegli colori e font e salva il design per riutilizzarlo su tutte le pagine.",
+    ),
+  },
+  {
+    q: l(
+      "How does the automatic translation work?",
+      "Wie funktioniert die automatische Übersetzung?",
+      "Comment fonctionne la traduction automatique ?",
+      "Come funziona la traduzione automatica?",
+    ),
+    a: l(
+      "You write in your language and click Translate. AI fills in the other languages in seconds, and you can adjust any word afterwards.",
+      "Sie schreiben in Ihrer Sprache und klicken auf Übersetzen. Die KI ergänzt die anderen Sprachen in Sekunden, und Sie können jedes Wort danach anpassen.",
+      "Vous écrivez dans votre langue et cliquez sur Traduire. L'IA complète les autres langues en quelques secondes, et vous pouvez ajuster chaque mot ensuite.",
+      "Scrivi nella tua lingua e clicchi su Traduci. L'IA completa le altre lingue in pochi secondi e puoi modificare ogni parola in seguito.",
     ),
   },
   {

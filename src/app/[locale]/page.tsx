@@ -7,6 +7,7 @@ import { Solution } from "@/components/Solution";
 import { Products } from "@/components/Products";
 import { HowItWorks } from "@/components/HowItWorks";
 import { Features } from "@/components/Features";
+import { PageStudio } from "@/components/PageStudio";
 import { ForWhom } from "@/components/ForWhom";
 import { Pricing } from "@/components/Pricing";
 import { FAQ } from "@/components/FAQ";
@@ -50,6 +51,7 @@ export default async function Home({
         <Solution />
         <Products catalog={catalog} />
         <HowItWorks />
+        <PageStudio />
         <Features />
         <ForWhom />
         <Pricing prices={prices} />
