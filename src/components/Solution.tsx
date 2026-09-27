@@ -5,7 +5,7 @@ import { SectionHeading, Button, Arrow } from "@/components/ui";
 import { CardPreview } from "@/components/editor/CardPreview";
 import { exampleCard } from "@/components/editor/types";
 import { Reveal } from "@/components/Reveal";
-import { useT } from "@/lib/i18n";
+import { useLang, useT } from "@/lib/i18n";
 
 function Check() {
   return (
@@ -31,12 +31,13 @@ function Check() {
 
 export function Solution() {
   const t = useT();
+  const { lang } = useLang();
   return (
     <section id="solution" className="section-pad bg-paper-2/40 py-24 sm:py-32">
       <div className="grid items-center gap-12 lg:grid-cols-2">
         {/* The designer showcase: a live preview of a card built in our editor */}
         <Reveal y={40}>
-          <CardPreview config={exampleCard()} />
+          <CardPreview config={exampleCard()} locale={lang} />
         </Reveal>
 
         <Reveal delay={0.1}>

@@ -5,6 +5,7 @@ import { products, ui } from "@/lib/site";
 import { SectionHeading, Button, Arrow } from "@/components/ui";
 import { Reveal } from "@/components/Reveal";
 import { useT } from "@/lib/i18n";
+import { francs, type ProductCatalog } from "@/lib/catalog";
 
 function CardVisual({ accent }: { accent: boolean }) {
   return (
@@ -40,9 +41,12 @@ function CardVisual({ accent }: { accent: boolean }) {
   );
 }
 
-export function Products() {
+export function Products({ catalog = {} }: { catalog?: ProductCatalog }) {
   const t = useT();
   const business = products[0];
+  const live = catalog[business.productKey];
+  const price = live ? francs(live.price) : business.price;
+  const available = live?.available ?? true;
   return (
     /* Our flagship: the metal NFC business card */
     <section id="products" className="section-pad py-24 sm:py-32">
@@ -57,11 +61,17 @@ export function Products() {
             <p>
               <span className="text-xs text-muted">{t(ui.products.from)}</span>
               <br />
-              <span className="display text-3xl">CHF {business.price}</span>
+              <span className="display text-3xl">CHF {price}</span>
             </p>
-            <Button href="/editor" variant="solid">
-              {t(ui.products.order)} <Arrow />
-            </Button>
+            {available ? (
+              <Button href="/editor" variant="solid">
+                {t(ui.products.order)} <Arrow />
+              </Button>
+            ) : (
+              <span className="rounded-full border border-line px-5 py-3 text-sm font-semibold text-muted">
+                {t(ui.editor.notAvailable)}
+              </span>
+            )}
             <Button href="#pricing" variant="ghost">
               {t(ui.products.range.cta)}
             </Button>

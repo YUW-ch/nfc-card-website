@@ -1,13 +1,29 @@
 "use client";
 
-import { useRef, useState, type ReactNode } from "react";
-import Image from "next/image";
-import { ui } from "@/lib/site";
-import { useT } from "@/lib/i18n";
-import { Button, Arrow } from "@/components/ui";
+// The Taplino card designer: a step-by-step editor with a live preview, volume
+// pricing and a checkout step. Self-contained on purpose (only react,
+// next/image and files in this folder), so nfc-card-app can reuse it verbatim
+// via `pnpm sync:editor`. The host page supplies prices (`catalog`,
+// `volumeTiers`) and creates the order in `onCheckout`.
+
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { CardPreview } from "./CardPreview";
+import { Button, Arrow } from "./Button";
+import { s } from "./strings";
+import { makeT, type EditorLocale } from "./locale";
+import {
+  CheckoutError,
+  LogoError,
+  SVG_MAX_BYTES,
+  prepareLogo,
+  toLocaleSlug,
+  type CheckoutPayload,
+  type CheckoutPrefill,
+  type CheckoutResult,
+} from "./checkout";
 import {
   CARD_TYPES,
+  DEFAULT_VOLUME_TIERS,
   FINISHES,
   PRESETS,
   exampleCard,
@@ -17,22 +33,12 @@ import {
   type FontStyle,
   type HeaderShape,
   type Preset,
+  type ProductCatalog,
+  type VolumeTier,
 } from "./types";
 
-// Volume pricing — the more cards ordered, the bigger the per-card discount.
-// Tiers are checked high-to-low; the first one the quantity clears applies.
-const VOLUME_TIERS = [
-  { min: 200, off: 0.2 },
-  { min: 100, off: 0.15 },
-  { min: 50, off: 0.1 },
-  { min: 20, off: 0.07 },
-  { min: 10, off: 0.05 },
-  { min: 5, off: 0.03 },
-];
-
-function tierFor(qty: number) {
-  return VOLUME_TIERS.find((tier) => qty >= tier.min);
-}
+// The API accepts 1..1000 cards per line item.
+const MAX_QTY = 1000;
 
 const chf = (n: number) =>
   n.toLocaleString("de-CH", { maximumFractionDigits: 2 });
@@ -55,19 +61,28 @@ function Section({ n, title, children }: { n: number; title: string; children: R
   );
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+function Field({
+  label,
+  error,
+  children,
+}: {
+  label: string;
+  error?: string;
+  children: ReactNode;
+}) {
   return (
     <label className="block">
       <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">
         {label}
       </span>
       {children}
+      {error && <span className="mt-1.5 block text-xs font-medium text-accent">{error}</span>}
     </label>
   );
 }
 
 const inputCls =
-  "w-full rounded-xl border border-line bg-paper px-3.5 py-2.5 text-sm text-ink outline-none transition-colors focus:border-ink";
+  "w-full rounded-xl border border-line bg-paper px-3.5 py-2.5 text-sm text-ink outline-none transition-colors focus:border-ink aria-[invalid=true]:border-accent";
 
 function ColorField({
   label,
@@ -209,33 +224,205 @@ function LayoutGlyph({ kind, active }: { kind: CardLayout; active: boolean }) {
   );
 }
 
-export function CardEditor() {
-  const t = useT();
+type ContactDraft = {
+  email: string;
+  customerName: string;
+  phone: string;
+  companyName: string;
+  line1: string;
+  line2: string;
+  postalCode: string;
+  city: string;
+  country: string;
+};
+
+// Countries we ship to. The API takes ISO 3166-1 alpha-2 codes.
+const COUNTRIES = [
+  { code: "CH", label: s.countryCH },
+  { code: "LI", label: s.countryLI },
+];
+
+function draftFrom(prefill: CheckoutPrefill | undefined): ContactDraft {
+  const a = prefill?.shippingAddress ?? {};
+  return {
+    email: prefill?.email ?? "",
+    customerName: prefill?.customerName ?? "",
+    phone: prefill?.phone ?? "",
+    companyName: prefill?.companyName ?? "",
+    line1: a.line1 ?? "",
+    line2: a.line2 ?? "",
+    postalCode: a.postalCode ?? "",
+    city: a.city ?? "",
+    country: a.country ?? "CH",
+  };
+}
+
+type FieldError = "required" | "email";
+
+function validateContact(d: ContactDraft, askEmail: boolean) {
+  const errors: Partial<Record<keyof ContactDraft, FieldError>> = {};
+  if (askEmail) {
+    if (!d.email.trim()) errors.email = "required";
+    else if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.email.trim())) errors.email = "email";
+  }
+  for (const key of ["customerName", "line1", "postalCode", "city", "country"] as const) {
+    if (!d[key].trim()) errors[key] = "required";
+  }
+  return errors;
+}
+
+type OrderError =
+  | "generic"
+  | "stock"
+  | "invalid"
+  | "fields"
+  | "logoTooLarge"
+  | "logoRasterTooLarge"
+  | "logoUnreadable";
+
+const ORDER_ERROR_TEXT: Record<OrderError, (typeof s)[keyof typeof s]> = {
+  generic: s.orderError,
+  stock: s.orderStockError,
+  invalid: s.orderInvalidError,
+  fields: s.coFixFields,
+  logoTooLarge: s.logoTooLarge,
+  logoRasterTooLarge: s.logoRasterTooLarge,
+  logoUnreadable: s.logoUnreadable,
+};
+
+// Maps whatever the host's onCheckout threw to a message. Duck-typed as well,
+// in case the host bundles its own copy of CheckoutError.
+function errorKind(err: unknown): OrderError {
+  const kind =
+    err instanceof CheckoutError || err instanceof LogoError
+      ? err.kind
+      : (err as { kind?: unknown } | null)?.kind;
+  switch (kind) {
+    case "stock":
+      return "stock";
+    case "invalid":
+      return "invalid";
+    case "tooLarge":
+      return "logoTooLarge";
+    case "rasterTooLarge":
+      return "logoRasterTooLarge";
+    case "unreadable":
+      return "logoUnreadable";
+    default:
+      return "generic";
+  }
+}
+
+export type CardEditorProps = {
+  /** Called with the finished order; returns the payment page URL. */
+  onCheckout: (payload: CheckoutPayload) => Promise<CheckoutResult>;
+  /** UI language. Also sent as the order locale. */
+  locale?: EditorLocale;
+  /** Live prices and stock; missing products fall back to CARD_TYPES. */
+  catalog?: ProductCatalog;
+  /** Volume discount tiers; defaults to DEFAULT_VOLUME_TIERS. */
+  volumeTiers?: VolumeTier[];
+  /** Prefill for the checkout form (applied to empty fields, also later). */
+  prefill?: CheckoutPrefill;
+  /** Ask for an email address (false when the host knows the user). */
+  askEmail?: boolean;
+  /** Show a notice above the steps, e.g. after an abandoned payment. */
+  notice?: "cancelled" | null;
+  /**
+   * "page": full-width marketing page (two columns from lg, section padding).
+   * "panel": inside an app shell with a sidebar (two columns from xl).
+   */
+  layout?: "page" | "panel";
+  /** Extra classes for the outer grid; defaults to section padding on "page". */
+  className?: string;
+};
+
+// Tailwind needs literal class names, so both layouts are spelled out.
+const LAYOUTS = {
+  page: {
+    outer: "section-pad",
+    grid: "lg:grid-cols-[minmax(0,1fr)_minmax(0,440px)]",
+    controls: "order-2 scroll-mt-28 lg:order-1",
+    side: "order-1 lg:order-2",
+    sticky: "lg:sticky lg:top-28",
+  },
+  panel: {
+    outer: "",
+    grid: "xl:grid-cols-[minmax(0,1fr)_minmax(0,400px)]",
+    controls: "order-2 scroll-mt-24 xl:order-1",
+    side: "order-1 xl:order-2",
+    sticky: "xl:sticky xl:top-24",
+  },
+} as const;
+
+export function CardEditor({
+  onCheckout,
+  locale = "DE",
+  catalog = {},
+  volumeTiers,
+  prefill,
+  askEmail = true,
+  notice = null,
+  layout = "page",
+  className,
+}: CardEditorProps) {
+  const t = makeT(locale);
+  const ui = LAYOUTS[layout];
   const [config, setConfig] = useState<CardConfig>(initialConfig);
   const [activePreset, setActivePreset] = useState<string>(PRESETS[0].key);
-  const [qty, setQty] = useState(50);
+  const [rawQty, setQty] = useState(50);
   const [step, setStep] = useState(0);
-  const [ordered, setOrdered] = useState(false);
   const [placing, setPlacing] = useState(false);
-  const [orderFailed, setOrderFailed] = useState(false);
+  const [orderError, setOrderError] = useState<OrderError | null>(null);
+  const [logoError, setLogoError] = useState<OrderError | null>(null);
+  const [showNotice, setShowNotice] = useState(true);
+  const [edits, setEdits] = useState<Partial<ContactDraft>>({});
+  const [showErrors, setShowErrors] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const controlsRef = useRef<HTMLDivElement>(null);
 
-  const activeType = CARD_TYPES.find((c) => c.key === config.cardType) ?? CARD_TYPES[1];
+  // Prefill can arrive after mount (e.g. once the host's session loads), so the
+  // form shows the prefill for every field the customer has not edited yet.
+  const contact: ContactDraft = { ...draftFrom(prefill), ...edits };
+
+  // Coming back from the payment page via the browser's back button restores
+  // this page from the bfcache with the button still in its busy state.
+  useEffect(() => {
+    const onShow = (e: PageTransitionEvent) => {
+      if (e.persisted) setPlacing(false);
+    };
+    window.addEventListener("pageshow", onShow);
+    return () => window.removeEventListener("pageshow", onShow);
+  }, []);
+
+  const tiers = [...(volumeTiers?.length ? volumeTiers : DEFAULT_VOLUME_TIERS)].sort(
+    (a, b) => b.min - a.min,
+  );
+
+  // Live price and availability from the backend override the built-in defaults.
+  const cardTypes = CARD_TYPES.map((c) => {
+    const live = catalog[c.key];
+    return live ? { ...c, price: live.price, available: c.available && live.available } : c;
+  });
+  const activeType = cardTypes.find((c) => c.key === config.cardType) ?? cardTypes[1];
+  // Units left to order. null = unlimited or unknown.
+  const maxQty = catalog[activeType.key]?.stock ?? null;
+  const cap = maxQty != null && maxQty > 0 ? Math.min(maxQty, MAX_QTY) : MAX_QTY;
+  const qty = Math.min(rawQty, cap);
   const isBusiness = config.cardType === "business";
   const basePrice = activeType.price;
 
   // Wizard steps. Each step reveals a slice of the design controls; the live
-  // preview and order box stay pinned in the sidebar throughout.
-  const STEPS = [
-    ui.editor.stepCard,
-    ui.editor.stepTemplate,
-    ui.editor.stepDesign,
-    ui.editor.stepContent,
-  ];
+  // preview and order box stay pinned in the sidebar throughout. The last step
+  // collects contact and shipping details before payment.
+  const STEPS = [s.stepCard, s.stepTemplate, s.stepDesign, s.stepContent, s.stepCheckout];
   const lastStep = STEPS.length - 1;
 
   const set = <K extends keyof CardConfig>(key: K, val: CardConfig[K]) =>
     setConfig((c) => ({ ...c, [key]: val }));
+
+  const setField = (key: keyof ContactDraft, val: string) =>
+    setEdits((d) => ({ ...d, [key]: val }));
 
   const applyPreset = (p: Preset) => {
     setActivePreset(p.key);
@@ -256,19 +443,26 @@ export function CardEditor() {
   };
 
   const presetLabel: Record<Preset["key"], string> = {
-    restaurant: t(ui.editor.presetRestaurant),
-    electronics: t(ui.editor.presetElectronics),
-    fitness: t(ui.editor.presetFitness),
-    beauty: t(ui.editor.presetBeauty),
+    restaurant: t(s.presetRestaurant),
+    electronics: t(s.presetElectronics),
+    fitness: t(s.presetFitness),
+    beauty: t(s.presetBeauty),
   };
 
   const onLogo = (file: File | undefined) => {
     if (!file) return;
+    setLogoError(null);
+    if (file.type === "image/svg+xml" && file.size > SVG_MAX_BYTES) {
+      setLogoError("logoTooLarge");
+      if (fileRef.current) fileRef.current.value = "";
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => {
       set("logoDataUrl", reader.result as string);
       set("logoName", file.name);
     };
+    reader.onerror = () => setLogoError("logoUnreadable");
     reader.readAsDataURL(file);
   };
 
@@ -277,116 +471,101 @@ export function CardEditor() {
     setActivePreset(PRESETS[0].key);
     setQty(50);
     setStep(0);
+    setLogoError(null);
+    setOrderError(null);
     if (fileRef.current) fileRef.current.value = "";
   };
 
-  const tier = tierFor(qty);
+  // Client-side estimate that mirrors the server's pricing (unit price rounded
+  // to whole Rappen). The server recalculates and is authoritative.
+  const tier = tiers.find((tt) => qty >= tt.min);
   const off = tier?.off ?? 0;
-  const unit = basePrice * (1 - off);
-  const subtotalNum = qty * basePrice;
-  const totalNum = qty * unit;
+  const baseCents = Math.round(basePrice * 100);
+  const unitCents = Math.round(baseCents * (1 - off));
+  const unit = unitCents / 100;
+  const subtotalNum = (qty * baseCents) / 100;
+  const totalNum = (qty * unitCents) / 100;
   const savingsNum = subtotalNum - totalNum;
   const total = chf(totalNum);
 
-  const placeOrder = async () => {
-    if (!activeType.available || placing) return;
-    const lines = [
-      "New card order",
-      "",
-      `Card: ${t(activeType.name)}, ${t(activeType.material)}`,
-      ...(isBusiness ? [`Finish: ${config.finish}`] : []),
-      "",
-      ...(isBusiness
-        ? [
-            "Contact details",
-            `  Name: ${config.fullName || "-"}`,
-            `  Job title: ${config.jobTitle || "-"}`,
-            `  Company: ${config.company || "-"}`,
-            `  Phone: ${config.phone || "-"}`,
-            `  Email: ${config.email || "-"}`,
-            `  Website: ${config.website || "-"}`,
-            `  Logo file: ${config.logoName ?? "none uploaded, will send separately"}`,
-            `  Font: ${config.font}`,
-            `  Accent: ${config.accentColor}`,
-          ]
-        : [
-            `Template: ${presetLabel[activePreset as Preset["key"]] ?? activePreset}`,
-            `Layout: ${config.layout}`,
-            `Category: ${config.category || "-"}`,
-            `Headline: ${config.headline || t(ui.editor.defaultHeadline)}`,
-            ...(config.layout === "logo"
-              ? [
-                  `Logo label: ${config.logoText || t(ui.editor.defaultLogoText)}`,
-                  `Logo caption: ${config.logoHint || t(ui.editor.defaultLogoHint)}`,
-                ]
-              : []),
-            ...(config.layout === "text"
-              ? [`Message: ${config.bodyText || t(ui.editor.defaultBodyText)}`]
-              : []),
-            ...(config.layout === "list"
-              ? [
-                  `List title: ${config.listTitle || t(ui.editor.defaultListTitle)}`,
-                  `List items: ${(config.listItems || t(ui.editor.defaultListItems)).split("\n").filter(Boolean).join(", ")}`,
-                ]
-              : []),
-            `Logo file: ${config.logoName ?? "none uploaded, will send separately"}`,
-            `Font: ${config.font}`,
-            `Header edge: ${config.headerShape}`,
-            `Star rating: ${config.showStars ? "shown" : "hidden"}`,
-            `Backup QR code: ${config.showQr ? "yes" : "no"}`,
-            "",
-            "Colours",
-            `  Header: ${config.headerColor}`,
-            `  Header text: ${config.headerTextColor}`,
-            `  Background: ${config.bodyColor}`,
-            `  Stars: ${config.starColor}`,
-            `  Accent: ${config.accentColor}`,
-            "",
-            `Review link: ${config.reviewUrl || "-"}`,
-          ]),
-      "",
-      `Quantity: ${qty}`,
-      `Unit price: CHF ${chf(unit)}${off ? ` (−${Math.round(off * 100)}% volume discount)` : ""}`,
-      ...(off
-        ? [`Subtotal: CHF ${chf(subtotalNum)}`, `Discount: −CHF ${chf(savingsNum)}`]
-        : []),
-      `Total: CHF ${total}`,
-    ].join("\n");
+  const fieldErrors = showErrors ? validateContact(contact, askEmail) : {};
+  const fieldErrorText = (key: keyof ContactDraft) => {
+    const e = fieldErrors[key];
+    return e ? t(e === "email" ? s.coInvalidEmail : s.coRequired) : undefined;
+  };
 
-    const subject = `Card order: ${
-      isBusiness ? config.company || config.fullName || "Business card" : config.category || "Custom"
-    } (${qty} pcs)`;
+  const goToCheckout = () => {
+    setStep(lastStep);
+    controlsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const checkout = async () => {
+    if (!activeType.available || placing) return;
+    if (Object.keys(validateContact(contact, askEmail)).length > 0) {
+      setShowErrors(true);
+      setOrderError("fields");
+      if (step !== lastStep) goToCheckout();
+      return;
+    }
 
     setPlacing(true);
-    setOrderFailed(false);
+    setOrderError(null);
     try {
-      const res = await fetch("/api/order", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          subject,
-          text: lines,
-          replyTo: isBusiness ? config.email : undefined,
-        }),
-      });
-      if (!res.ok) throw new Error("Request failed");
-      setOrdered(true);
-    } catch {
-      setOrderFailed(true);
-    } finally {
+      const logo = await prepareLogo(config.logoDataUrl);
+      const trim = (v: string) => v.trim() || undefined;
+      const payload: CheckoutPayload = {
+        ...(askEmail ? { email: contact.email.trim() } : {}),
+        customerName: contact.customerName.trim(),
+        phone: trim(contact.phone),
+        companyName: trim(contact.companyName),
+        shippingAddress: {
+          line1: contact.line1.trim(),
+          line2: trim(contact.line2),
+          postalCode: contact.postalCode.trim(),
+          city: contact.city.trim(),
+          country: contact.country,
+        },
+        locale: toLocaleSlug(locale),
+        items: [{ productKey: activeType.key, quantity: qty, design: { ...config, logoDataUrl: logo } }],
+      };
+      const { checkoutUrl } = await onCheckout(payload);
+      // Stay in the busy state while the browser leaves for the payment page.
+      window.location.assign(checkoutUrl);
+    } catch (err) {
+      setOrderError(errorKind(err));
       setPlacing(false);
     }
   };
 
+  const orderErrorText = orderError ? t(ORDER_ERROR_TEXT[orderError]) : null;
+  const busyLabel = t(s.redirecting);
+
   return (
-    <div className="section-pad grid gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,440px)]">
+    <div className={`${className ?? ui.outer} grid gap-12 ${ui.grid}`}>
       {/* ── Controls ─────────────────────────────────────────────── */}
-      <div className="order-2 lg:order-1">
+      <div ref={controlsRef} className={ui.controls}>
+        {notice === "cancelled" && showNotice && (
+          <div
+            role="status"
+            className="mb-8 flex items-start justify-between gap-4 rounded-2xl border border-accent/30 bg-accent-soft px-4 py-3 text-sm text-ink"
+          >
+            <span>{t(s.cancelledNotice)}</span>
+            <button
+              type="button"
+              onClick={() => setShowNotice(false)}
+              aria-label="×"
+              className="shrink-0 text-lg leading-none text-muted transition-colors hover:text-ink"
+            >
+              ×
+            </button>
+          </div>
+        )}
+
         {/* Wizard progress */}
         <div className="mb-8">
           <div className="mb-3 flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wide text-muted">
-              {t(ui.editor.stepWord)} {step + 1}/{STEPS.length}
+              {t(s.stepWord)} {step + 1}/{STEPS.length}
             </span>
             <span className="text-xs font-semibold text-ink">{t(STEPS[step])}</span>
           </div>
@@ -408,10 +587,10 @@ export function CardEditor() {
 
         {/* Step 1 — card type */}
         {step === 0 && (
-          <Section n={1} title={t(ui.editor.stepCard)}>
-            <p className="mb-4 text-sm text-muted">{t(ui.editor.cardTypeHint)}</p>
+          <Section n={1} title={t(s.stepCard)}>
+            <p className="mb-4 text-sm text-muted">{t(s.cardTypeHint)}</p>
             <div className="space-y-3">
-              {CARD_TYPES.map((c) => {
+              {cardTypes.map((c) => {
                 const active = config.cardType === c.key;
                 return (
                   <button
@@ -427,7 +606,7 @@ export function CardEditor() {
                         {t(c.name)}
                         {!c.available && (
                           <span className="rounded-full border border-line bg-paper px-2 py-0.5 text-[0.6rem] font-semibold uppercase tracking-wide text-muted">
-                            {t(ui.editor.notAvailable)}
+                            {t(s.notAvailable)}
                           </span>
                         )}
                       </span>
@@ -435,7 +614,7 @@ export function CardEditor() {
                       <span className="mt-1 block text-xs font-medium text-muted">{t(c.material)}</span>
                     </span>
                     <span className="shrink-0 text-right">
-                      <span className="block text-[0.7rem] text-muted">{t(ui.products.from)}</span>
+                      <span className="block text-[0.7rem] text-muted">{t(s.from)}</span>
                       <span className="display text-xl text-ink">CHF {c.price}</span>
                     </span>
                   </button>
@@ -447,7 +626,7 @@ export function CardEditor() {
             {activeType.finishes && (
               <div className="mt-5">
                 <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">
-                  {t(ui.editor.finishLabel)}
+                  {t(s.finishLabel)}
                 </span>
                 <div className="flex gap-2">
                   {FINISHES.filter((f) => activeType.finishes!.includes(f.key)).map((f) => {
@@ -477,8 +656,8 @@ export function CardEditor() {
 
         {/* Step 2 — template */}
         {step === 1 && (
-        <Section n={1} title={t(ui.editor.stepTemplate)}>
-          <p className="mb-4 text-sm text-muted">{t(ui.editor.templateHint)}</p>
+        <Section n={1} title={t(s.stepTemplate)}>
+          <p className="mb-4 text-sm text-muted">{t(s.templateHint)}</p>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4">
             {PRESETS.map((p) => {
               const active = activePreset === p.key;
@@ -525,21 +704,21 @@ export function CardEditor() {
         {/* Step 3 — design: layout, style, logo & colours */}
         {step === 2 && (
         <>
-        <Section n={1} title={t(ui.editor.stepStyle)}>
-          <p className="mb-4 text-sm text-muted">{t(ui.editor.styleHint)}</p>
+        <Section n={1} title={t(s.stepStyle)}>
+          <p className="mb-4 text-sm text-muted">{t(s.styleHint)}</p>
 
           {/* Layout picker — review/menu cards only */}
           {!isBusiness && (
           <>
           <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">
-            {t(ui.editor.layoutLabel)}
+            {t(s.layoutLabel)}
           </span>
           <div className="mb-6 grid grid-cols-3 gap-2">
             {(
               [
-                { key: "logo", label: t(ui.editor.layoutLogo), hint: t(ui.editor.layoutLogoHint) },
-                { key: "text", label: t(ui.editor.layoutText), hint: t(ui.editor.layoutTextHint) },
-                { key: "list", label: t(ui.editor.layoutList), hint: t(ui.editor.layoutListHint) },
+                { key: "logo", label: t(s.layoutLogo), hint: t(s.layoutLogoHint) },
+                { key: "text", label: t(s.layoutText), hint: t(s.layoutTextHint) },
+                { key: "list", label: t(s.layoutList), hint: t(s.layoutListHint) },
               ] as { key: CardLayout; label: string; hint: string }[]
             ).map((o) => {
               const active = config.layout === o.key;
@@ -564,26 +743,26 @@ export function CardEditor() {
 
           <div className="flex flex-wrap gap-x-8 gap-y-5">
             <Segmented<FontStyle>
-              label={t(ui.editor.fontStyle)}
+              label={t(s.fontStyle)}
               value={config.font}
               onChange={(v) => set("font", v)}
               options={[
-                { value: "sans", label: t(ui.editor.fontSans) },
-                { value: "serif", label: t(ui.editor.fontSerif) },
-                { value: "rounded", label: t(ui.editor.fontRounded) },
-                { value: "display", label: t(ui.editor.fontDisplay) },
+                { value: "sans", label: t(s.fontSans) },
+                { value: "serif", label: t(s.fontSerif) },
+                { value: "rounded", label: t(s.fontRounded) },
+                { value: "display", label: t(s.fontDisplay) },
               ]}
             />
             {!isBusiness && (
             <Segmented<HeaderShape>
-              label={t(ui.editor.headerEdge)}
+              label={t(s.headerEdge)}
               value={config.headerShape}
               onChange={(v) => set("headerShape", v)}
               options={[
-                { value: "straight", label: t(ui.editor.edgeStraight) },
-                { value: "wave", label: t(ui.editor.edgeWave) },
-                { value: "round", label: t(ui.editor.edgeRound) },
-                { value: "scallop", label: t(ui.editor.edgeScallop) },
+                { value: "straight", label: t(s.edgeStraight) },
+                { value: "wave", label: t(s.edgeWave) },
+                { value: "round", label: t(s.edgeRound) },
+                { value: "scallop", label: t(s.edgeScallop) },
               ]}
             />
             )}
@@ -592,14 +771,14 @@ export function CardEditor() {
           {!isBusiness && (
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
             <Toggle
-              label={t(ui.editor.showStars)}
-              hint={t(ui.editor.showStarsHint)}
+              label={t(s.showStars)}
+              hint={t(s.showStarsHint)}
               checked={config.showStars}
               onChange={(v) => set("showStars", v)}
             />
             <Toggle
-              label={t(ui.editor.showQr)}
-              hint={t(ui.editor.showQrHint)}
+              label={t(s.showQr)}
+              hint={t(s.showQrHint)}
               checked={config.showQr}
               onChange={(v) => set("showQr", v)}
             />
@@ -608,7 +787,7 @@ export function CardEditor() {
         </Section>
 
         {/* 3. Logo */}
-        <Section n={2} title={t(ui.editor.stepLogo)}>
+        <Section n={2} title={t(s.stepLogo)}>
           <input
             ref={fileRef}
             type="file"
@@ -630,18 +809,19 @@ export function CardEditor() {
                     onClick={() => fileRef.current?.click()}
                     className="font-semibold text-ink link-underline"
                   >
-                    {t(ui.editor.replaceLogo)}
+                    {t(s.replaceLogo)}
                   </button>
                   <button
                     type="button"
                     onClick={() => {
                       set("logoDataUrl", null);
                       set("logoName", null);
+                      setLogoError(null);
                       if (fileRef.current) fileRef.current.value = "";
                     }}
                     className="font-semibold text-muted hover:text-accent"
                   >
-                    {t(ui.editor.removeLogo)}
+                    {t(s.removeLogo)}
                   </button>
                 </div>
               </div>
@@ -656,24 +836,27 @@ export function CardEditor() {
                 <path d="M12 16V4m0 0L7 9m5-5l5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="text-ink" />
                 <path d="M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" className="text-muted" />
               </svg>
-              <span className="text-sm font-semibold text-ink">{t(ui.editor.uploadLogo)}</span>
-              <span className="text-xs text-muted">{t(ui.editor.uploadHint)}</span>
+              <span className="text-sm font-semibold text-ink">{t(s.uploadLogo)}</span>
+              <span className="text-xs text-muted">{t(s.uploadHint)}</span>
             </button>
+          )}
+          {logoError && (
+            <p className="mt-3 text-sm font-medium text-accent">{t(ORDER_ERROR_TEXT[logoError])}</p>
           )}
         </Section>
 
         {/* 4. Colours */}
-        <Section n={3} title={t(ui.editor.stepColors)}>
+        <Section n={3} title={t(s.stepColors)}>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             {!isBusiness && (
               <>
-                <ColorField label={t(ui.editor.colorHeader)} value={config.headerColor} onChange={(v) => set("headerColor", v)} />
-                <ColorField label={t(ui.editor.colorHeaderText)} value={config.headerTextColor} onChange={(v) => set("headerTextColor", v)} />
-                <ColorField label={t(ui.editor.colorBody)} value={config.bodyColor} onChange={(v) => set("bodyColor", v)} />
-                <ColorField label={t(ui.editor.colorStars)} value={config.starColor} onChange={(v) => set("starColor", v)} />
+                <ColorField label={t(s.colorHeader)} value={config.headerColor} onChange={(v) => set("headerColor", v)} />
+                <ColorField label={t(s.colorHeaderText)} value={config.headerTextColor} onChange={(v) => set("headerTextColor", v)} />
+                <ColorField label={t(s.colorBody)} value={config.bodyColor} onChange={(v) => set("bodyColor", v)} />
+                <ColorField label={t(s.colorStars)} value={config.starColor} onChange={(v) => set("starColor", v)} />
               </>
             )}
-            <ColorField label={t(ui.editor.colorAccent)} value={config.accentColor} onChange={(v) => set("accentColor", v)} />
+            <ColorField label={t(s.colorAccent)} value={config.accentColor} onChange={(v) => set("accentColor", v)} />
           </div>
         </Section>
 
@@ -683,68 +866,68 @@ export function CardEditor() {
         {/* Step 4 — content & destination */}
         {step === 3 && (
         <>
-        <Section n={1} title={isBusiness ? t(ui.editor.stepDetails) : t(ui.editor.stepContent)}>
+        <Section n={1} title={isBusiness ? t(s.stepDetails) : t(s.stepContent)}>
           {isBusiness ? (
           <>
-            <p className="mb-4 text-sm text-muted">{t(ui.editor.detailsHint)}</p>
+            <p className="mb-4 text-sm text-muted">{t(s.detailsHint)}</p>
             <div className="space-y-4">
-              <Field label={t(ui.editor.fieldName)}>
+              <Field label={t(s.fieldName)}>
                 <input
                   type="text"
                   className={inputCls}
                   value={config.fullName}
-                  placeholder={t(ui.editor.fieldNamePh)}
+                  placeholder={t(s.fieldNamePh)}
                   onChange={(e) => set("fullName", e.target.value)}
                 />
               </Field>
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label={t(ui.editor.fieldRole)}>
+                <Field label={t(s.fieldRole)}>
                   <input
                     type="text"
                     className={inputCls}
                     value={config.jobTitle}
-                    placeholder={t(ui.editor.fieldRolePh)}
+                    placeholder={t(s.fieldRolePh)}
                     onChange={(e) => set("jobTitle", e.target.value)}
                   />
                 </Field>
-                <Field label={t(ui.editor.fieldCompany)}>
+                <Field label={t(s.fieldCompany)}>
                   <input
                     type="text"
                     className={inputCls}
                     value={config.company}
-                    placeholder={t(ui.editor.fieldCompanyPh)}
+                    placeholder={t(s.fieldCompanyPh)}
                     onChange={(e) => set("company", e.target.value)}
                   />
                 </Field>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label={t(ui.editor.fieldPhone)}>
+                <Field label={t(s.fieldPhone)}>
                   <input
                     type="tel"
                     inputMode="tel"
                     className={inputCls}
                     value={config.phone}
-                    placeholder={t(ui.editor.fieldPhonePh)}
+                    placeholder={t(s.fieldPhonePh)}
                     onChange={(e) => set("phone", e.target.value)}
                   />
                 </Field>
-                <Field label={t(ui.editor.fieldEmail)}>
+                <Field label={t(s.fieldEmail)}>
                   <input
                     type="email"
                     inputMode="email"
                     className={inputCls}
                     value={config.email}
-                    placeholder={t(ui.editor.fieldEmailPh)}
+                    placeholder={t(s.fieldEmailPh)}
                     onChange={(e) => set("email", e.target.value)}
                   />
                 </Field>
               </div>
-              <Field label={t(ui.editor.fieldWebsite)}>
+              <Field label={t(s.fieldWebsite)}>
                 <input
                   type="text"
                   className={inputCls}
                   value={config.website}
-                  placeholder={t(ui.editor.fieldWebsitePh)}
+                  placeholder={t(s.fieldWebsitePh)}
                   onChange={(e) => set("website", e.target.value)}
                 />
               </Field>
@@ -752,12 +935,12 @@ export function CardEditor() {
           </>
           ) : (
           <div className="space-y-4">
-            <Field label={t(ui.editor.fieldHeadline)}>
+            <Field label={t(s.fieldHeadline)}>
               <input
                 type="text"
                 className={inputCls}
                 value={config.headline}
-                placeholder={t(ui.editor.defaultHeadline)}
+                placeholder={t(s.defaultHeadline)}
                 onChange={(e) => set("headline", e.target.value)}
               />
             </Field>
@@ -765,21 +948,21 @@ export function CardEditor() {
             {/* Fields that depend on the chosen layout */}
             {config.layout === "logo" && (
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label={t(ui.editor.fieldLogoText)}>
+                <Field label={t(s.fieldLogoText)}>
                   <input
                     type="text"
                     className={inputCls}
                     value={config.logoText}
-                    placeholder={t(ui.editor.defaultLogoText)}
+                    placeholder={t(s.defaultLogoText)}
                     onChange={(e) => set("logoText", e.target.value)}
                   />
                 </Field>
-                <Field label={t(ui.editor.fieldLogoHint)}>
+                <Field label={t(s.fieldLogoHint)}>
                   <input
                     type="text"
                     className={inputCls}
                     value={config.logoHint}
-                    placeholder={t(ui.editor.defaultLogoHint)}
+                    placeholder={t(s.defaultLogoHint)}
                     onChange={(e) => set("logoHint", e.target.value)}
                   />
                 </Field>
@@ -787,12 +970,12 @@ export function CardEditor() {
             )}
 
             {config.layout === "text" && (
-              <Field label={t(ui.editor.fieldBodyText)}>
+              <Field label={t(s.fieldBodyText)}>
                 <textarea
                   rows={3}
                   className={textareaCls}
                   value={config.bodyText}
-                  placeholder={t(ui.editor.fieldBodyTextPh)}
+                  placeholder={t(s.fieldBodyTextPh)}
                   onChange={(e) => set("bodyText", e.target.value)}
                 />
               </Field>
@@ -800,33 +983,33 @@ export function CardEditor() {
 
             {config.layout === "list" && (
               <div className="space-y-4">
-                <Field label={t(ui.editor.fieldListTitle)}>
+                <Field label={t(s.fieldListTitle)}>
                   <input
                     type="text"
                     className={inputCls}
                     value={config.listTitle}
-                    placeholder={t(ui.editor.fieldListTitlePh)}
+                    placeholder={t(s.fieldListTitlePh)}
                     onChange={(e) => set("listTitle", e.target.value)}
                   />
                 </Field>
-                <Field label={t(ui.editor.fieldListItems)}>
+                <Field label={t(s.fieldListItems)}>
                   <textarea
                     rows={4}
                     className={textareaCls}
                     value={config.listItems}
-                    placeholder={t(ui.editor.fieldListItemsPh)}
+                    placeholder={t(s.fieldListItemsPh)}
                     onChange={(e) => set("listItems", e.target.value)}
                   />
                 </Field>
               </div>
             )}
 
-            <Field label={t(ui.editor.fieldCategory)}>
+            <Field label={t(s.fieldCategory)}>
               <input
                 type="text"
                 className={inputCls}
                 value={config.category}
-                placeholder={t(ui.editor.fieldCategoryPh)}
+                placeholder={t(s.fieldCategoryPh)}
                 onChange={(e) => set("category", e.target.value)}
               />
             </Field>
@@ -836,21 +1019,134 @@ export function CardEditor() {
 
         {/* 6. Destination — review/menu cards only */}
         {!isBusiness && (
-        <Section n={2} title={t(ui.editor.stepLink)}>
-          <Field label={t(ui.editor.reviewUrl)}>
+        <Section n={2} title={t(s.stepLink)}>
+          <Field label={t(s.reviewUrl)}>
             <input
               type="url"
               inputMode="url"
               className={inputCls}
               value={config.reviewUrl}
-              placeholder={t(ui.editor.reviewUrlPh)}
+              placeholder={t(s.reviewUrlPh)}
               onChange={(e) => set("reviewUrl", e.target.value)}
             />
           </Field>
-          <p className="mt-2 text-xs leading-relaxed text-muted">{t(ui.editor.reviewUrlHint)}</p>
+          <p className="mt-2 text-xs leading-relaxed text-muted">{t(s.reviewUrlHint)}</p>
         </Section>
         )}
         </>
+        )}
+
+        {/* Step 5: checkout, contact and shipping details */}
+        {step === 4 && (
+        <Section n={1} title={t(s.stepCheckout)}>
+          <p className="mb-5 text-sm text-muted">{t(s.checkoutHint)}</p>
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-ink">{t(s.contactHeading)}</h3>
+            {askEmail && (
+              <Field label={t(s.coEmail)} error={fieldErrorText("email")}>
+                <input
+                  type="email"
+                  inputMode="email"
+                  autoComplete="email"
+                  className={inputCls}
+                  value={contact.email}
+                  aria-invalid={Boolean(fieldErrors.email)}
+                  onChange={(e) => setField("email", e.target.value)}
+                />
+                <span className="mt-1.5 block text-xs leading-snug text-muted">{t(s.coEmailHint)}</span>
+              </Field>
+            )}
+            <Field label={t(s.coName)} error={fieldErrorText("customerName")}>
+              <input
+                type="text"
+                autoComplete="name"
+                className={inputCls}
+                value={contact.customerName}
+                aria-invalid={Boolean(fieldErrors.customerName)}
+                onChange={(e) => setField("customerName", e.target.value)}
+              />
+            </Field>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label={t(s.coCompany)}>
+                <input
+                  type="text"
+                  autoComplete="organization"
+                  className={inputCls}
+                  value={contact.companyName}
+                  onChange={(e) => setField("companyName", e.target.value)}
+                />
+              </Field>
+              <Field label={t(s.coPhone)}>
+                <input
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  className={inputCls}
+                  value={contact.phone}
+                  onChange={(e) => setField("phone", e.target.value)}
+                />
+              </Field>
+            </div>
+
+            <h3 className="pt-3 text-sm font-semibold text-ink">{t(s.shippingHeading)}</h3>
+            <Field label={t(s.coLine1)} error={fieldErrorText("line1")}>
+              <input
+                type="text"
+                autoComplete="address-line1"
+                className={inputCls}
+                value={contact.line1}
+                aria-invalid={Boolean(fieldErrors.line1)}
+                onChange={(e) => setField("line1", e.target.value)}
+              />
+            </Field>
+            <Field label={t(s.coLine2)}>
+              <input
+                type="text"
+                autoComplete="address-line2"
+                className={inputCls}
+                value={contact.line2}
+                onChange={(e) => setField("line2", e.target.value)}
+              />
+            </Field>
+            <div className="grid gap-4 sm:grid-cols-[minmax(0,9rem)_minmax(0,1fr)]">
+              <Field label={t(s.coPostalCode)} error={fieldErrorText("postalCode")}>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="postal-code"
+                  className={inputCls}
+                  value={contact.postalCode}
+                  aria-invalid={Boolean(fieldErrors.postalCode)}
+                  onChange={(e) => setField("postalCode", e.target.value)}
+                />
+              </Field>
+              <Field label={t(s.coCity)} error={fieldErrorText("city")}>
+                <input
+                  type="text"
+                  autoComplete="address-level2"
+                  className={inputCls}
+                  value={contact.city}
+                  aria-invalid={Boolean(fieldErrors.city)}
+                  onChange={(e) => setField("city", e.target.value)}
+                />
+              </Field>
+            </div>
+            <Field label={t(s.coCountry)} error={fieldErrorText("country")}>
+              <select
+                autoComplete="country"
+                className={inputCls}
+                value={contact.country}
+                onChange={(e) => setField("country", e.target.value)}
+              >
+                {COUNTRIES.map((co) => (
+                  <option key={co.code} value={co.code}>
+                    {t(co.label)}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+        </Section>
         )}
 
         {/* Step navigation */}
@@ -862,25 +1158,25 @@ export function CardEditor() {
               disabled={step === 0}
               className="text-sm font-semibold text-muted transition-colors hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
             >
-              ← {t(ui.editor.back)}
+              ← {t(s.back)}
             </button>
             {!activeType.available ? (
               <span className="inline-flex items-center rounded-full border border-line px-6 py-3 text-sm font-semibold text-muted">
-                {t(ui.editor.notAvailable)}
+                {t(s.notAvailable)}
               </span>
             ) : step < lastStep ? (
               <Button onClick={() => setStep((s) => Math.min(lastStep, s + 1))}>
-                {t(ui.editor.continue)} <Arrow />
+                {t(s.continue)} <Arrow />
               </Button>
             ) : (
-              <Button onClick={placeOrder} aria-disabled={placing}>
-                {placing ? t(ui.editor.orderSending) : t(ui.editor.placeOrder)} <Arrow />
+              <Button onClick={checkout} disabled={placing}>
+                {placing ? busyLabel : t(s.payNow)} <Arrow />
               </Button>
             )}
           </div>
-          {orderFailed && (
-            <p className="mt-4 text-center text-sm font-medium text-accent">
-              {t(ui.editor.orderError)}
+          {orderErrorText && (
+            <p role="alert" className="mt-4 text-center text-sm font-medium text-accent">
+              {orderErrorText}
             </p>
           )}
           <button
@@ -888,24 +1184,24 @@ export function CardEditor() {
             onClick={reset}
             className="mx-auto mt-4 block text-sm font-semibold text-muted transition-colors hover:text-accent"
           >
-            ↺ {t(ui.editor.resetDesign)}
+            ↺ {t(s.resetDesign)}
           </button>
         </div>
       </div>
 
       {/* ── Preview + order (sticky) ─────────────────────────────── */}
-      <div className="order-1 lg:order-2">
-        <div className="lg:sticky lg:top-28">
-          <CardPreview config={config} />
+      <div className={ui.side}>
+        <div className={ui.sticky}>
+          <CardPreview config={config} locale={locale} />
 
           {/* Order box */}
           <div className="mt-6 rounded-card border border-line bg-paper-2/40 p-5">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold text-ink">{t(ui.editor.quantity)}</span>
+              <span className="text-sm font-semibold text-ink">{t(s.quantity)}</span>
               <div className="flex items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => setQty((q) => Math.max(1, q - 1))}
+                  onClick={() => setQty(Math.max(1, qty - 1))}
                   className="grid h-8 w-8 place-items-center rounded-full border border-line text-lg leading-none text-ink hover:border-ink"
                   aria-label="−"
                 >
@@ -914,13 +1210,14 @@ export function CardEditor() {
                 <input
                   type="number"
                   min={1}
+                  max={cap}
                   value={qty}
-                  onChange={(e) => setQty(Math.max(1, Number(e.target.value) || 1))}
+                  onChange={(e) => setQty(Math.min(cap, Math.max(1, Number(e.target.value) || 1)))}
                   className="w-14 rounded-lg border border-line bg-paper py-1 text-center text-sm font-semibold text-ink outline-none focus:border-ink"
                 />
                 <button
                   type="button"
-                  onClick={() => setQty((q) => q + 1)}
+                  onClick={() => setQty(Math.min(cap, qty + 1))}
                   className="grid h-8 w-8 place-items-center rounded-full border border-line text-lg leading-none text-ink hover:border-ink"
                   aria-label="+"
                 >
@@ -933,7 +1230,7 @@ export function CardEditor() {
             <div className="mt-4 rounded-xl border border-line bg-paper/60 p-3">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-xs font-semibold uppercase tracking-wide text-muted">
-                  {t(ui.editor.volumeDiscount)}
+                  {t(s.volumeDiscount)}
                 </span>
                 {off > 0 && (
                   <span className="rounded-full bg-accent px-2 py-0.5 text-[0.7rem] font-bold text-white">
@@ -942,7 +1239,7 @@ export function CardEditor() {
                 )}
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
-                {[...VOLUME_TIERS].reverse().map((tt) => {
+                {[...tiers].reverse().map((tt) => {
                   const reached = qty >= tt.min;
                   const current = tier?.min === tt.min;
                   return (
@@ -963,7 +1260,7 @@ export function CardEditor() {
               </div>
               {off === 0 && (
                 <p className="mt-2 text-[0.7rem] leading-snug text-muted">
-                  {t(ui.editor.volumeHint)}
+                  {t(s.volumeHint)}
                 </p>
               )}
             </div>
@@ -971,60 +1268,39 @@ export function CardEditor() {
             <div className="mt-4 flex items-end justify-between border-t border-line pt-4">
               <div>
                 <span className="text-xs text-muted">
-                  {t(ui.editor.total)} · CHF {chf(unit)} {t(ui.editor.unitPrice)}
+                  {t(s.total)} · CHF {chf(unit)} {t(s.unitPrice)}
                 </span>
                 <p className="display text-3xl text-ink">CHF {total}</p>
                 {off > 0 && (
                   <p className="mt-0.5 text-xs font-medium text-accent">
-                    {t(ui.editor.youSave)} CHF {chf(savingsNum)}{" "}
+                    {t(s.youSave)} CHF {chf(savingsNum)}{" "}
                     <span className="text-muted line-through">CHF {chf(subtotalNum)}</span>
                   </p>
                 )}
               </div>
               {activeType.available ? (
-                <Button onClick={placeOrder} aria-disabled={placing}>
-                  {placing ? t(ui.editor.orderSending) : t(ui.editor.placeOrder)} <Arrow />
+                <Button
+                  onClick={step === lastStep ? checkout : goToCheckout}
+                  disabled={placing}
+                >
+                  {placing ? busyLabel : t(step === lastStep ? s.payNow : s.placeOrder)} <Arrow />
                 </Button>
               ) : (
                 <span className="inline-flex items-center rounded-full border border-line px-6 py-3 text-sm font-semibold text-muted">
-                  {t(ui.editor.notAvailable)}
+                  {t(s.notAvailable)}
                 </span>
               )}
             </div>
 
-            {orderFailed && (
-              <p className="mt-3 text-sm font-medium text-accent">{t(ui.editor.orderError)}</p>
+            {orderErrorText && (
+              <p className="mt-3 text-sm font-medium text-accent">{orderErrorText}</p>
             )}
-            <p className="mt-3 text-xs leading-relaxed text-muted">{t(ui.editor.orderNote)}</p>
+            <p className="mt-3 text-xs leading-relaxed text-muted">
+              {t(s.orderNote)} {t(s.estimateNote)}
+            </p>
           </div>
         </div>
       </div>
-
-      {/* Confirmation */}
-      {ordered && (
-        <div
-          className="fixed inset-0 z-[200] grid place-items-center bg-ink/40 p-6 backdrop-blur-sm"
-          onClick={() => setOrdered(false)}
-        >
-          <div
-            className="w-full max-w-md rounded-card border border-line bg-paper p-8 text-center shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="mx-auto mb-5 grid h-14 w-14 place-items-center rounded-full bg-accent-soft">
-              <Image src="/logo/taplino-mark.svg" alt="" width={64} height={64} className="h-8 w-8" />
-            </div>
-            <h3 className="display text-2xl text-ink">{t(ui.editor.orderThanks)}</h3>
-            <p className="mt-3 text-sm leading-relaxed text-muted">{t(ui.editor.orderThanksSentBody)}</p>
-            <button
-              type="button"
-              onClick={() => setOrdered(false)}
-              className="mt-6 text-sm font-semibold text-ink link-underline"
-            >
-              {t(ui.editor.orderClose)}
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

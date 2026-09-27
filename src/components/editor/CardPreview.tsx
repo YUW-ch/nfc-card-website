@@ -1,8 +1,11 @@
 "use client";
 
 import Image from "next/image";
-import { ui } from "@/lib/site";
-import { useT } from "@/lib/i18n";
+import { s } from "./strings";
+import { makeT, type EditorLocale, type Translate } from "./locale";
+import markLogo from "./assets/taplino-mark.svg";
+import markLogoLight from "./assets/taplino-mark-cream-on-ink.svg";
+import lockupLogo from "./assets/taplino-lockup.svg";
 import { CARD_TYPES, FINISHES, FONT_STACKS, type CardConfig, type HeaderShape } from "./types";
 
 const STAR =
@@ -162,7 +165,7 @@ function MetalCardFace({
 }: {
   config: CardConfig;
   dark: boolean; // black finish → light text; silver finish → dark text
-  t: ReturnType<typeof useT>;
+  t: Translate;
 }) {
   const cardFont = FONT_STACKS[config.font];
   const serif = config.font === "serif";
@@ -178,12 +181,12 @@ function MetalCardFace({
     letterSpacing: display ? "-0.02em" : "-0.01em",
   };
 
-  const name = config.fullName || t(ui.editor.bizNameDefault);
+  const name = config.fullName || t(s.bizNameDefault);
   const role = config.jobTitle;
   const company = config.company;
-  const phone = config.phone || t(ui.editor.fieldPhonePh);
-  const email = config.email || t(ui.editor.fieldEmailPh);
-  const website = config.website || t(ui.editor.fieldWebsitePh);
+  const phone = config.phone || t(s.fieldPhonePh);
+  const email = config.email || t(s.fieldEmailPh);
+  const website = config.website || t(s.fieldWebsitePh);
 
   return (
     <div className="relative h-full">
@@ -217,10 +220,11 @@ function MetalCardFace({
             <span />
           )}
           <Image
-            src={dark ? "/logo/taplino-mark-cream-on-ink.svg" : "/logo/taplino-mark.svg"}
+            src={dark ? markLogoLight : markLogo}
             alt="Taplino"
             width={64}
             height={64}
+            unoptimized
             className="h-6 w-6 shrink-0 opacity-90"
           />
         </div>
@@ -249,8 +253,14 @@ function MetalCardFace({
 }
 
 // A faithful, live-updating recreation of the printed Google-review card.
-export function CardPreview({ config }: { config: CardConfig }) {
-  const t = useT();
+export function CardPreview({
+  config,
+  locale = "DE",
+}: {
+  config: CardConfig;
+  locale?: EditorLocale;
+}) {
+  const t = makeT(locale);
   const serif = config.font === "serif";
   const display = config.font === "display";
   const cardFont = FONT_STACKS[config.font];
@@ -268,7 +278,7 @@ export function CardPreview({ config }: { config: CardConfig }) {
     .split("\n")
     .map((s) => s.trim())
     .filter(Boolean);
-  const listItems = items.length ? items : t(ui.editor.defaultListItems).split("\n");
+  const listItems = items.length ? items : t(s.defaultListItems).split("\n");
 
   // Each card type has its own physical format (aspect ratio + relative size).
   const typeDef = CARD_TYPES.find((c) => c.key === config.cardType);
@@ -317,7 +327,7 @@ export function CardPreview({ config }: { config: CardConfig }) {
                 className={`text-[1.05rem] leading-tight ${config.showStars ? "mt-2.5" : "mt-0"}`}
                 style={headlineStyle}
               >
-                {config.headline || t(ui.editor.defaultHeadline)}
+                {config.headline || t(s.defaultHeadline)}
               </p>
             </div>
             <HeaderEdge shape={config.headerShape} color={config.headerColor} />
@@ -348,10 +358,10 @@ export function CardPreview({ config }: { config: CardConfig }) {
                       className="text-sm font-bold uppercase tracking-wide"
                       style={{ color: config.accentColor, fontFamily: cardFont, fontStyle: serif ? "italic" : "normal" }}
                     >
-                      {config.logoText || t(ui.editor.defaultLogoText)}
+                      {config.logoText || t(s.defaultLogoText)}
                     </p>
                     <p className="text-xs" style={{ color: `${config.accentColor}cc` }}>
-                      {config.logoHint || t(ui.editor.defaultLogoHint)}
+                      {config.logoHint || t(s.defaultLogoHint)}
                     </p>
                   </>
                 )}
@@ -384,7 +394,7 @@ export function CardPreview({ config }: { config: CardConfig }) {
                 className="text-ink text-[1.35rem] leading-snug"
                 style={{ ...headlineStyle, color: undefined }}
               >
-                {config.bodyText || t(ui.editor.defaultBodyText)}
+                {config.bodyText || t(s.defaultBodyText)}
               </p>
             </div>
           )}
@@ -395,7 +405,7 @@ export function CardPreview({ config }: { config: CardConfig }) {
                 className="text-center text-xs font-bold uppercase tracking-[0.16em]"
                 style={{ color: config.accentColor, fontFamily: cardFont, fontStyle: serif ? "italic" : "normal" }}
               >
-                {config.listTitle || t(ui.editor.defaultListTitle)}
+                {config.listTitle || t(s.defaultListTitle)}
               </p>
               <ul className="mx-auto flex w-full max-w-[15rem] flex-col gap-1.5">
                 {listItems.slice(0, 6).map((row, i) => (
@@ -425,10 +435,10 @@ export function CardPreview({ config }: { config: CardConfig }) {
                   className="text-[0.62rem] font-bold uppercase tracking-wide"
                   style={{ color: config.accentColor }}
                 >
-                  {t(ui.editor.cardQrTitle)}
+                  {t(s.cardQrTitle)}
                 </p>
                 <p className="text-ink/60 text-[0.62rem] leading-tight">
-                  {t(ui.editor.cardQrHint)}
+                  {t(s.cardQrHint)}
                 </p>
               </div>
             </div>
@@ -439,25 +449,26 @@ export function CardPreview({ config }: { config: CardConfig }) {
             <div className="flex items-center gap-1.5">
               <GoogleG />
               <span className="text-[0.62rem] font-semibold leading-tight text-ink/80">
-                {t(ui.editor.cardGoogleReview)}
+                {t(s.cardGoogleReview)}
               </span>
             </div>
             <div className="h-6 w-px bg-black/10" />
             <div className="flex items-center gap-1.5">
               <TapGlyph color={config.accentColor} />
               <span className="text-[0.62rem] font-semibold leading-tight text-ink/80">
-                {t(ui.editor.cardTap)}
+                {t(s.cardTap)}
               </span>
             </div>
             <div className="ml-auto flex flex-col items-end">
               <span className="text-[0.5rem] uppercase tracking-wide text-ink/45">
-                {t(ui.editor.cardPoweredBy)}
+                {t(s.cardPoweredBy)}
               </span>
               <Image
-                src="/logo/taplino-lockup.svg"
+                src={lockupLogo}
                 alt="Taplino"
                 width={330}
                 height={80}
+                unoptimized
                 className="h-3.5 w-auto"
               />
             </div>

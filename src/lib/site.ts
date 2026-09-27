@@ -284,6 +284,8 @@ export const features = [
 export const products = [
   {
     name: "NFC Business Card",
+    // Price and availability are synced from the backend (see lib/catalog.ts).
+    productKey: "business",
     material: l("Anodised aluminium", "Eloxiertes Aluminium", "Aluminium anodisé", "Alluminio anodizzato"),
     price: "89",
     blurb: l(
@@ -299,6 +301,7 @@ export const products = [
 // ── The menu card, showcased with the free editor ─────────────────────
 export const menuCard = {
   name: "Menu Card",
+  productKey: "review",
   material: l("PVC", "PVC", "PVC", "PVC"),
   price: "50",
   blurb: l(
@@ -314,6 +317,7 @@ export const menuCard = {
 export const reviewCards = [
   {
     name: "Google Review Card",
+    productKey: "review",
     material: l("PVC", "PVC", "PVC", "PVC"),
     price: "50",
     blurb: l(
@@ -329,6 +333,8 @@ export const reviewCards = [
 export const pricing = [
   {
     name: "Starter",
+    // Price is synced from the backend plan catalogue (see lib/catalog.ts).
+    tier: "STARTER" as const,
     price: "50",
     unit: l("one-time / card", "einmalig / Karte", "unique / carte", "una tantum / carta"),
     monthly: false,
@@ -350,6 +356,7 @@ export const pricing = [
   },
   {
     name: "Pro",
+    tier: "PRO" as const,
     price: "39",
     unit: l("per month", "pro Monat", "par mois", "al mese"),
     monthly: true,
@@ -371,6 +378,7 @@ export const pricing = [
   },
   {
     name: "Managed",
+    tier: "MANAGED" as const,
     price: "250",
     unit: l("per month", "pro Monat", "par mois", "al mese"),
     monthly: true,
@@ -812,198 +820,86 @@ export const ui = {
       "Choisissez un style, ajoutez votre logo, définissez vos couleurs et la destination d'un tap. Votre carte se met à jour en direct, commandez quand elle vous convient.",
       "Scegli uno stile, aggiungi il tuo logo, definisci i colori e la destinazione del tap. La tua carta si aggiorna in tempo reale: ordina quando è pronta.",
     ),
-    // Step / section headings
-    stepCard: l("Card", "Karte", "Carte", "Carta"),
-    stepDesign: l("Design", "Design", "Design", "Design"),
-    stepTemplate: l("Template", "Vorlage", "Modèle", "Modello"),
-    stepLogo: l("Your logo", "Ihr Logo", "Votre logo", "Il tuo logo"),
-    stepColors: l("Colours", "Farben", "Couleurs", "Colori"),
-    stepContent: l("Content", "Inhalt", "Contenu", "Contenuto"),
-    stepLink: l("Destination", "Ziel", "Destination", "Destinazione"),
-    stepOrder: l("Order", "Bestellung", "Commande", "Ordine"),
-    // Wizard navigation
-    stepWord: l("Step", "Schritt", "Étape", "Passo"),
-    back: l("Back", "Zurück", "Retour", "Indietro"),
-    continue: l("Continue", "Weiter", "Continuer", "Continua"),
-    // Card-type step
-    cardTypeHint: l(
-      "Pick the card you want, then design its face in the next steps.",
-      "Wählen Sie die gewünschte Karte, gestalten Sie die Vorderseite in den nächsten Schritten.",
-      "Choisissez la carte souhaitée, puis personnalisez sa face dans les étapes suivantes.",
-      "Scegli la carta che vuoi, poi personalizza il fronte nei passaggi successivi.",
-    ),
-    finishLabel: l("Finish", "Oberfläche", "Finition", "Finitura"),
     notAvailable: l("Currently not available", "Zurzeit nicht verfügbar", "Actuellement indisponible", "Attualmente non disponibile"),
-    // Business-card fields
-    stepDetails: l("Your details", "Ihre Angaben", "Vos coordonnées", "I tuoi dati"),
-    detailsHint: l(
-      "This is what your metal business card shares with one tap.",
-      "Das teilt Ihre Metall-Visitenkarte mit einem Tap.",
-      "Voici ce que votre carte de visite métal partage d'un tap.",
-      "Questo è ciò che il tuo biglietto in metallo condivide con un tap.",
+  },
+  orderSuccess: {
+    // ── Order confirmation page (after Stripe Checkout) ─────────────
+    metaTitle: l("Order confirmation", "Bestellbestätigung", "Confirmation de commande", "Conferma d'ordine"),
+    eyebrow: l("Order", "Bestellung", "Commande", "Ordine"),
+    titlePaid: l("Thank you for your order", "Vielen Dank für Ihre Bestellung", "Merci pour votre commande", "Grazie per il tuo ordine"),
+    titlePending: l("Almost there", "Fast geschafft", "Presque terminé", "Quasi fatto"),
+    introPaid: l(
+      "Your payment was received. We are preparing your cards and will send you an email as soon as they ship.",
+      "Ihre Zahlung ist eingegangen. Wir bereiten Ihre Karten vor und informieren Sie per E-Mail, sobald sie versandt werden.",
+      "Votre paiement a bien été reçu. Nous préparons vos cartes et vous écrivons dès leur expédition.",
+      "Abbiamo ricevuto il pagamento. Stiamo preparando le tue carte e ti scriveremo appena saranno spedite.",
     ),
-    fieldName: l("Full name", "Name", "Nom complet", "Nome completo"),
-    fieldNamePh: l("Jane Meier", "Jane Meier", "Jane Meier", "Jane Meier"),
-    fieldRole: l("Job title", "Position", "Fonction", "Ruolo"),
-    fieldRolePh: l("Founder", "Gründerin", "Fondatrice", "Fondatrice"),
-    fieldCompany: l("Company", "Firma", "Entreprise", "Azienda"),
-    fieldCompanyPh: l("Meier GmbH", "Meier GmbH", "Meier Sàrl", "Meier SA"),
-    fieldPhone: l("Phone", "Telefon", "Téléphone", "Telefono"),
-    fieldPhonePh: l("+41 79 123 45 67", "+41 79 123 45 67", "+41 79 123 45 67", "+41 79 123 45 67"),
-    fieldEmail: l("Email", "E-Mail", "E-mail", "Email"),
-    fieldEmailPh: l("jane@meier.ch", "jane@meier.ch", "jane@meier.ch", "jane@meier.ch"),
-    fieldWebsite: l("Website", "Website", "Site web", "Sito web"),
-    fieldWebsitePh: l("meier.ch", "meier.ch", "meier.ch", "meier.ch"),
-    bizNameDefault: l("Your name", "Ihr Name", "Votre nom", "Il tuo nome"),
-    // Template picker
-    templateHint: l(
-      "Start from an industry style and keep everything editable.",
-      "Starten Sie mit einem Branchen-Stil, alles bleibt anpassbar.",
-      "Partez d'un style sectoriel, tout reste modifiable.",
-      "Parti da uno stile di settore, tutto resta modificabile.",
+    introPending: l(
+      "Your payment is being confirmed. This usually takes a few seconds.",
+      "Ihre Zahlung wird bestätigt. Das dauert normalerweise nur wenige Sekunden.",
+      "Votre paiement est en cours de confirmation. Cela ne prend généralement que quelques secondes.",
+      "Stiamo confermando il pagamento. Di solito bastano pochi secondi.",
     ),
-    presetRestaurant: l("Restaurant", "Restaurant", "Restaurant", "Ristorante"),
-    presetElectronics: l("Electronics", "Elektronik", "Électronique", "Elettronica"),
-    presetFitness: l("Fitness & Club", "Fitness & Club", "Fitness & Club", "Fitness & Club"),
-    presetBeauty: l("Beauty & Salon", "Beauty & Salon", "Beauté & Salon", "Bellezza & Salone"),
-    // Logo upload
-    uploadLogo: l("Upload your logo", "Logo hochladen", "Téléverser votre logo", "Carica il tuo logo"),
-    uploadHint: l(
-      "PNG, SVG or JPG. A transparent PNG looks best.",
-      "PNG, SVG oder JPG. Ein transparentes PNG wirkt am besten.",
-      "PNG, SVG ou JPG. Un PNG transparent est idéal.",
-      "PNG, SVG o JPG. Un PNG trasparente rende meglio.",
+    introClosed: l(
+      "This order is no longer active. If you think this is a mistake, please contact us.",
+      "Diese Bestellung ist nicht mehr aktiv. Falls das ein Irrtum ist, kontaktieren Sie uns bitte.",
+      "Cette commande n'est plus active. S'il s'agit d'une erreur, contactez-nous.",
+      "Questo ordine non è più attivo. Se pensi sia un errore, contattaci.",
     ),
-    removeLogo: l("Remove logo", "Logo entfernen", "Retirer le logo", "Rimuovi logo"),
-    replaceLogo: l("Replace", "Ersetzen", "Remplacer", "Sostituisci"),
-    // Colour labels
-    colorHeader: l("Header", "Kopfzeile", "En-tête", "Intestazione"),
-    colorHeaderText: l("Header text", "Kopftext", "Texte d'en-tête", "Testo intestazione"),
-    colorBody: l("Background", "Hintergrund", "Fond", "Sfondo"),
-    colorStars: l("Stars", "Sterne", "Étoiles", "Stelle"),
-    colorAccent: l("Accent", "Akzent", "Accent", "Accento"),
-    // Content fields
-    fieldCategory: l("Category label", "Branchen-Label", "Étiquette secteur", "Etichetta categoria"),
-    fieldCategoryPh: l("e.g. Fast food & restaurant", "z. B. Schnellrestaurant", "p. ex. Restauration rapide", "es. Ristorazione veloce"),
-    fieldHeadline: l("Headline", "Überschrift", "Titre", "Titolo"),
-    fieldLogoText: l("Logo label", "Logo-Text", "Texte logo", "Testo logo"),
-    fieldLogoHint: l("Logo caption", "Logo-Untertitel", "Légende logo", "Didascalia logo"),
-    fontStyle: l("Font style", "Schriftstil", "Style de police", "Stile carattere"),
-    fontSans: l("Modern", "Modern", "Moderne", "Moderno"),
-    fontSerif: l("Elegant", "Elegant", "Élégant", "Elegante"),
-    fontRounded: l("Friendly", "Freundlich", "Convivial", "Amichevole"),
-    fontDisplay: l("Bold", "Kräftig", "Impactant", "Deciso"),
-    // ── Layout & style section ──────────────────────────────────────
-    stepStyle: l("Layout & style", "Layout & Stil", "Mise en page & style", "Layout e stile"),
-    styleHint: l(
-      "Pick what the card leads with, then fine-tune the look. No big logo? Lead with a message or a short list instead.",
-      "Bestimmen Sie, was die Karte in den Mittelpunkt stellt, und verfeinern Sie den Look. Kein grosses Logo? Setzen Sie stattdessen auf eine Botschaft oder eine kurze Liste.",
-      "Choisissez l'élément principal de la carte, puis affinez le style. Pas de grand logo ? Misez plutôt sur un message ou une courte liste.",
-      "Scegli l'elemento principale della carta, poi rifinisci lo stile. Niente logo grande? Punta invece su un messaggio o un breve elenco.",
-    ),
-    layoutLabel: l("Layout", "Layout", "Mise en page", "Layout"),
-    layoutLogo: l("Logo", "Logo", "Logo", "Logo"),
-    layoutLogoHint: l("Big logo in the centre", "Grosses Logo in der Mitte", "Grand logo au centre", "Logo grande al centro"),
-    layoutText: l("Message", "Botschaft", "Message", "Messaggio"),
-    layoutTextHint: l("A bold custom text", "Ein kräftiger eigener Text", "Un texte fort personnalisé", "Un testo forte personalizzato"),
-    layoutList: l("List / menu", "Liste / Menü", "Liste / menu", "Elenco / menù"),
-    layoutListHint: l("Menu items or services", "Menüpunkte oder Leistungen", "Plats ou services", "Voci di menù o servizi"),
-    headerEdge: l("Header edge", "Kopf-Kante", "Bord d'en-tête", "Bordo intestazione"),
-    edgeStraight: l("Straight", "Gerade", "Droit", "Dritto"),
-    edgeWave: l("Wave", "Welle", "Vague", "Onda"),
-    edgeRound: l("Arch", "Bogen", "Arche", "Arco"),
-    edgeScallop: l("Scallop", "Wellenrand", "Feston", "Smerlo"),
-    showStars: l("Star rating", "Sterne-Bewertung", "Note en étoiles", "Valutazione a stelle"),
-    showStarsHint: l("Show five gold stars in the header", "Fünf goldene Sterne im Kopf anzeigen", "Afficher cinq étoiles dorées dans l'en-tête", "Mostra cinque stelle dorate nell'intestazione"),
-    showQr: l("Backup QR code", "Backup-QR-Code", "QR code de secours", "QR code di riserva"),
-    showQrHint: l("Add a scannable code for phones without NFC", "Scanbaren Code für Handys ohne NFC hinzufügen", "Ajouter un code scannable pour les téléphones sans NFC", "Aggiungi un codice scansionabile per telefoni senza NFC"),
-    // Layout-specific content fields
-    fieldBodyText: l("Card message", "Karten-Botschaft", "Message de la carte", "Messaggio della carta"),
-    fieldBodyTextPh: l("Loved your visit? Tell the world in 30 seconds.", "Hat es Ihnen gefallen? Erzählen Sie es in 30 Sekunden.", "Vous avez aimé ? Dites-le en 30 secondes.", "Ti è piaciuto? Raccontalo in 30 secondi."),
-    fieldListTitle: l("List title", "Listen-Titel", "Titre de la liste", "Titolo elenco"),
-    fieldListTitlePh: l("e.g. Today's favourites", "z. B. Beliebt heute", "p. ex. Les favoris du jour", "es. I preferiti di oggi"),
-    fieldListItems: l("List items (one per line)", "Listenpunkte (einer pro Zeile)", "Éléments (un par ligne)", "Voci (una per riga)"),
-    fieldListItemsPh: l("Signature burger\nHand-cut fries\nHomemade lemonade", "Signature-Burger\nHausgemachte Pommes\nHausgemachte Limonade", "Burger signature\nFrites maison\nLimonade maison", "Burger d'autore\nPatatine fatte in casa\nLimonata fatta in casa"),
-    // Destination
-    reviewUrl: l("Google review link", "Google-Bewertungslink", "Lien d'avis Google", "Link recensione Google"),
-    reviewUrlPh: l("https://g.page/r/…", "https://g.page/r/…", "https://g.page/r/…", "https://g.page/r/…"),
-    reviewUrlHint: l(
-      "Where a tap sends your customers. Paste your Google review link, or leave it blank and we'll help you set it up.",
-      "Wohin ein Tap Ihre Kunden schickt. Fügen Sie Ihren Google-Bewertungslink ein, oder lassen Sie es leer, wir helfen bei der Einrichtung.",
-      "Où un tap envoie vos clients. Collez votre lien d'avis Google, ou laissez vide, nous vous aidons à le configurer.",
-      "Dove un tap invia i tuoi clienti. Incolla il link di recensione Google, o lascia vuoto, ti aiutiamo a configurarlo.",
-    ),
-    // Card footer labels (printed on the card)
-    cardGoogleReview: l("Google review", "Google-Bewertung", "Avis Google", "Recensione Google"),
-    cardTap: l("Tap", "Antippen", "Approcher", "Avvicina"),
-    cardPoweredBy: l("Powered by", "Powered by", "Propulsé par", "Powered by"),
-    cardSize: l("Card · 120 × 120 mm", "Karte · 120 × 120 mm", "Carte · 120 × 120 mm", "Carta · 120 × 120 mm"),
-    cardQrTitle: l("No NFC?", "Kein NFC?", "Pas de NFC ?", "Niente NFC?"),
-    cardQrHint: l("Scan to leave a review", "Zum Bewerten scannen", "Scannez pour laisser un avis", "Scansiona per recensire"),
-    defaultBodyText: l(
-      "Loved your visit? Tap and tell us in 30 seconds.",
-      "Hat es Ihnen gefallen? Antippen und in 30 Sekunden erzählen.",
-      "Vous avez aimé ? Tapez et dites-le en 30 secondes.",
-      "Ti è piaciuto? Tappa e raccontalo in 30 secondi.",
-    ),
-    defaultListTitle: l("Today's favourites", "Beliebt heute", "Les favoris du jour", "I preferiti di oggi"),
-    defaultListItems: l(
-      "Signature burger\nHand-cut fries\nHomemade lemonade\nDaily fresh salads",
-      "Signature-Burger\nHausgemachte Pommes\nHausgemachte Limonade\nTäglich frische Salate",
-      "Burger signature\nFrites maison\nLimonade maison\nSalades fraîches du jour",
-      "Burger d'autore\nPatatine fatte in casa\nLimonata fatta in casa\nInsalate fresche del giorno",
-    ),
-    // Defaults printed on a fresh card
-    defaultHeadline: l(
-      "We'd love your review!",
-      "Wir freuen uns über Ihre Bewertung!",
-      "Votre avis nous ferait plaisir !",
-      "Ci farebbe piacere una tua recensione!",
-    ),
-    defaultLogoText: l("YOUR LOGO", "IHR LOGO", "VOTRE LOGO", "IL TUO LOGO"),
-    defaultLogoHint: l("Add your logo here", "Firmenlogo hier einfügen", "Ajoutez votre logo ici", "Inserisci qui il tuo logo"),
-    // Order panel
-    quantity: l("Quantity", "Menge", "Quantité", "Quantità"),
-    unitPrice: l("per card", "pro Karte", "par carte", "a carta"),
+    refresh: l("Refresh status", "Status aktualisieren", "Actualiser le statut", "Aggiorna lo stato"),
+    refreshing: l("Refreshing…", "Wird aktualisiert…", "Actualisation…", "Aggiornamento…"),
+    orderNumber: l("Order number", "Bestellnummer", "Numéro de commande", "Numero d'ordine"),
+    status: l("Status", "Status", "Statut", "Stato"),
+    items: l("Items", "Artikel", "Articles", "Articoli"),
     total: l("Total", "Total", "Total", "Totale"),
-    volumeDiscount: l("Volume discount", "Mengenrabatt", "Remise sur volume", "Sconto quantità"),
-    volumeHint: l(
-      "The more you order, the less you pay per card.",
-      "Je mehr Sie bestellen, desto weniger zahlen Sie pro Karte.",
-      "Plus vous commandez, moins vous payez par carte.",
-      "Più ordini, meno paghi a carta.",
+    confirmationSent: l(
+      "A confirmation has been sent to",
+      "Eine Bestätigung wurde gesendet an",
+      "Une confirmation a été envoyée à",
+      "Una conferma è stata inviata a",
     ),
-    youSave: l("You save", "Sie sparen", "Vous économisez", "Risparmi"),
-    orderNote: l(
-      "Incl. personalisation & Swiss QA. Free shipping in Switzerland.",
-      "Inkl. Personalisierung & Schweizer Qualitätsprüfung. Kostenloser Versand in der Schweiz.",
-      "Personnalisation & contrôle qualité suisse inclus. Livraison gratuite en Suisse.",
-      "Personalizzazione e controllo qualità svizzero inclusi. Spedizione gratuita in Svizzera.",
+    statusPending: l("Payment being confirmed", "Zahlung wird bestätigt", "Paiement en confirmation", "Pagamento in conferma"),
+    statusPaid: l("Paid", "Bezahlt", "Payée", "Pagato"),
+    statusProduction: l("In production", "In Produktion", "En production", "In produzione"),
+    statusShipped: l("Shipped", "Versandt", "Expédiée", "Spedito"),
+    statusExpired: l("Expired", "Abgelaufen", "Expirée", "Scaduto"),
+    statusCancelled: l("Cancelled", "Storniert", "Annulée", "Annullato"),
+    accountEyebrow: l("Next step", "Nächster Schritt", "Étape suivante", "Prossimo passo"),
+    accountTitle: l(
+      "Create your free Taplino account",
+      "Erstellen Sie Ihr kostenloses Taplino-Konto",
+      "Créez votre compte Taplino gratuit",
+      "Crea il tuo account Taplino gratuito",
     ),
-    placeOrder: l("Place order", "Bestellung aufgeben", "Passer commande", "Ordina ora"),
-    resetDesign: l("Reset design", "Design zurücksetzen", "Réinitialiser", "Reimposta"),
-    // Confirmation
-    orderThanks: l(
-      "Order received",
-      "Bestellung erhalten",
-      "Commande reçue",
-      "Ordine ricevuto",
+    accountBody: l(
+      "Manage your cards, change where a tap leads at any time and see how often they are used. Sign up with the email address from this order and your cards appear in your account automatically.",
+      "Verwalten Sie Ihre Karten, ändern Sie jederzeit das Tap-Ziel und sehen Sie, wie oft sie genutzt werden. Registrieren Sie sich mit der E-Mail-Adresse dieser Bestellung, dann erscheinen Ihre Karten automatisch in Ihrem Konto.",
+      "Gérez vos cartes, modifiez à tout moment la destination d'un tap et voyez leur utilisation. Inscrivez-vous avec l'adresse e-mail de cette commande et vos cartes apparaissent automatiquement dans votre compte.",
+      "Gestisci le tue carte, cambia in qualsiasi momento la destinazione del tap e scopri quanto vengono usate. Registrati con l'indirizzo email di questo ordine e le carte compariranno automaticamente nel tuo account.",
     ),
-    orderClose: l("Keep editing", "Weiter bearbeiten", "Continuer l'édition", "Continua a modificare"),
-    // Order sending states (order is emailed to our sales inbox)
-    orderSending: l("Sending…", "Wird gesendet…", "Envoi…", "Invio…"),
-    orderThanksSentBody: l(
-      "Your card specification is on its way to our team. We'll reply with a proof within 24 hours.",
-      "Ihre Kartenspezifikation ist auf dem Weg zu unserem Team. Wir antworten innert 24 Stunden mit einem Entwurf.",
-      "La spécification de votre carte est en route vers notre équipe. Nous répondons avec une épreuve sous 24 heures.",
-      "La specifica della tua carta è in viaggio verso il nostro team. Ti risponderemo con una bozza entro 24 ore.",
+    accountCta: l("Create free account", "Kostenloses Konto erstellen", "Créer un compte gratuit", "Crea account gratuito"),
+    accountClaimed: l(
+      "This order is already linked to a Taplino account.",
+      "Diese Bestellung ist bereits mit einem Taplino-Konto verknüpft.",
+      "Cette commande est déjà liée à un compte Taplino.",
+      "Questo ordine è già collegato a un account Taplino.",
     ),
-    orderError: l(
-      "Something went wrong while sending your order. Please try again in a moment.",
-      "Beim Senden Ihrer Bestellung ist etwas schiefgelaufen. Bitte versuchen Sie es gleich noch einmal.",
-      "Une erreur s'est produite lors de l'envoi de votre commande. Veuillez réessayer dans un instant.",
-      "Qualcosa è andato storto durante l'invio del tuo ordine. Riprova tra un istante.",
+    accountOpen: l("Open Taplino", "Taplino öffnen", "Ouvrir Taplino", "Apri Taplino"),
+    notFoundTitle: l("Order not found", "Bestellung nicht gefunden", "Commande introuvable", "Ordine non trovato"),
+    notFoundBody: l(
+      "We could not find this order. If you just paid, please check your email for the confirmation or contact us.",
+      "Wir konnten diese Bestellung nicht finden. Falls Sie gerade bezahlt haben, prüfen Sie bitte Ihre E-Mails oder kontaktieren Sie uns.",
+      "Nous n'avons pas trouvé cette commande. Si vous venez de payer, vérifiez vos e-mails ou contactez-nous.",
+      "Non abbiamo trovato questo ordine. Se hai appena pagato, controlla la tua email o contattaci.",
     ),
+    errorBody: l(
+      "We could not load your order right now. Please refresh in a moment. Your payment is safe.",
+      "Ihre Bestellung konnte gerade nicht geladen werden. Bitte aktualisieren Sie die Seite gleich noch einmal. Ihre Zahlung ist sicher.",
+      "Impossible de charger votre commande pour le moment. Actualisez la page dans un instant. Votre paiement est en sécurité.",
+      "Al momento non riusciamo a caricare il tuo ordine. Aggiorna la pagina tra un attimo. Il pagamento è al sicuro.",
+    ),
+    contact: l("Contact us", "Kontakt aufnehmen", "Nous contacter", "Contattaci"),
+    backHome: l("Back to the homepage", "Zurück zur Startseite", "Retour à l'accueil", "Torna alla home"),
   },
   contact: {
     eyebrow: l("Contact", "Kontakt", "Contact", "Contatto"),

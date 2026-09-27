@@ -1,11 +1,11 @@
 // Shared types + industry presets for the card editor.
-import { l, type L } from "@/lib/locale";
+import { l, type L } from "./locale";
 
 export type FontStyle = "sans" | "serif" | "rounded" | "display";
 
 // The physical card the customer is ordering. "business" is the premium metal
 // card (available in a silver or black finish); "review" is our classic printed
-// card (the one shown across the site).
+// card for reviews and menus.
 export type CardType = "business" | "review";
 export type CardFinish = "silver" | "black";
 
@@ -44,10 +44,10 @@ export const CARD_TYPES: CardTypeDef[] = [
     key: "review",
     name: l("Review & menu card", "Bewertungs- & Menükarte", "Carte avis & menu", "Carta recensioni & menu"),
     tagline: l(
-      "Our classic, the card shown across the site",
-      "Unser Klassiker, die Karte von der Website",
-      "Notre classique, la carte présentée sur le site",
-      "Il nostro classico, la carta mostrata sul sito",
+      "Our classic for Google reviews, menus and more",
+      "Unser Klassiker für Google-Bewertungen, Menüs und mehr",
+      "Notre classique pour les avis Google, les menus et plus",
+      "Il nostro classico per recensioni Google, menu e altro",
     ),
     material: l("PVC", "PVC", "PVC", "PVC"),
     price: 50,
@@ -240,3 +240,22 @@ export const FONT_STACKS: Record<FontStyle, string> = {
     'ui-rounded, "SF Pro Rounded", "Hiragino Maru Gothic ProN", "Quicksand", var(--font-body)',
   display: "var(--font-display)",
 };
+
+// Live price and availability per product, keyed by product key (matches
+// `CardType`). Prices in CHF. Missing entries fall back to CARD_TYPES.
+export type ProductCatalog = Partial<
+  Record<string, { price: number; available: boolean; stock: number | null }>
+>;
+
+// Volume pricing: the more cards ordered, the bigger the per-card discount.
+// Tiers are checked high-to-low; the first one the quantity clears applies.
+export type VolumeTier = { min: number; off: number };
+
+export const DEFAULT_VOLUME_TIERS: VolumeTier[] = [
+  { min: 200, off: 0.2 },
+  { min: 100, off: 0.15 },
+  { min: 50, off: 0.1 },
+  { min: 20, off: 0.07 },
+  { min: 10, off: 0.05 },
+  { min: 5, off: 0.03 },
+];

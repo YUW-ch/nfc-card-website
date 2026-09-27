@@ -4,8 +4,9 @@ import { pricing, ui } from "@/lib/site";
 import { SectionHeading, Button, Arrow } from "@/components/ui";
 import { Reveal } from "@/components/Reveal";
 import { useT } from "@/lib/i18n";
+import type { PlanPrices } from "@/lib/catalog";
 
-export function Pricing() {
+export function Pricing({ prices = {} }: { prices?: PlanPrices }) {
   const t = useT();
   return (
     <section id="pricing" className="section-pad py-24 sm:py-32">
@@ -44,7 +45,9 @@ export function Pricing() {
                 <span className={`text-sm ${p.featured ? "text-paper/60" : "text-muted"}`}>
                   CHF
                 </span>
-                <span className="display text-5xl">{p.price}</span>
+                <span className="display text-5xl">
+                  {(p.tier && prices[p.tier]) || p.price}
+                </span>
                 <span className={`text-sm ${p.featured ? "text-paper/60" : "text-muted"}`}>
                   /{t(p.monthly ? ui.pricing.perMonth : ui.pricing.perCard)}
                 </span>

@@ -12,6 +12,7 @@ import {
   seoCopy,
 } from "@/lib/seo";
 import { products, menuCard, reviewCards, faqs, pages } from "@/lib/site";
+import { francs, type ProductCatalog } from "@/lib/catalog";
 
 function JsonLd({ data }: { data: unknown }) {
   return (
@@ -80,26 +81,36 @@ export function SiteJsonLd({ locale }: { locale: Locale }) {
 }
 
 // Product list + FAQPage + BreadcrumbList — rendered on the home page.
-export function HomeJsonLd({ locale }: { locale: Locale }) {
+export function HomeJsonLd({
+  locale,
+  catalog = {},
+}: {
+  locale: Locale;
+  catalog?: ProductCatalog;
+}) {
   const home = localeUrl(locale);
 
-  const productList = [...products, menuCard, ...reviewCards].map((p) => ({
-    "@type": "Product",
-    name: p.name,
-    description: p.blurb[locale],
-    material: p.material[locale],
-    brand: { "@type": "Brand", name: SITE_NAME },
-    // Prices are shown as "from CHF X" on the page, so model them as a lower
-    // bound (AggregateOffer.lowPrice) rather than an exact Offer.price.
-    offers: {
-      "@type": "AggregateOffer",
-      lowPrice: p.price,
-      priceCurrency: "CHF",
-      availability: "https://schema.org/InStock",
-      url: `${home}#products`,
-      seller: { "@id": ORG_ID },
-    },
-  }));
+  const productList = [...products, menuCard, ...reviewCards].map((p) => {
+    const live = catalog[p.productKey];
+    return {
+      "@type": "Product",
+      name: p.name,
+      description: p.blurb[locale],
+      material: p.material[locale],
+      brand: { "@type": "Brand", name: SITE_NAME },
+      // Prices are shown as "from CHF X" on the page, so model them as a lower
+      // bound (AggregateOffer.lowPrice) rather than an exact Offer.price.
+      offers: {
+        "@type": "AggregateOffer",
+        lowPrice: live ? francs(live.price) : p.price,
+        priceCurrency: "CHF",
+        availability:
+          live && !live.available ? "https://schema.org/OutOfStock" : "https://schema.org/InStock",
+        url: `${home}#products`,
+        seller: { "@id": ORG_ID },
+      },
+    };
+  });
 
   const faqPage = {
     "@type": "FAQPage",

@@ -14,6 +14,7 @@ import { CTA } from "@/components/CTA";
 import { Footer } from "@/components/Footer";
 import { HomeJsonLd } from "@/components/JsonLd";
 import { slugToLocale } from "@/lib/locale";
+import { fetchPlanPrices, fetchProducts } from "@/lib/catalog";
 import { buildMetadata, seoCopy, seoKeywords } from "@/lib/seo";
 
 export async function generateMetadata({
@@ -37,20 +38,21 @@ export default async function Home({
   params: Promise<{ locale: string }>;
 }) {
   const loc = slugToLocale((await params).locale) ?? "DE";
+  const [prices, catalog] = await Promise.all([fetchPlanPrices(), fetchProducts()]);
   return (
     <>
-      <HomeJsonLd locale={loc} />
+      <HomeJsonLd locale={loc} catalog={catalog} />
       <Nav />
       <main className="flex-1">
         <Hero />
         <Logos />
         <Problem />
         <Solution />
-        <Products />
+        <Products catalog={catalog} />
         <HowItWorks />
         <Features />
         <ForWhom />
-        <Pricing />
+        <Pricing prices={prices} />
         <FAQ />
         <CTA />
       </main>
