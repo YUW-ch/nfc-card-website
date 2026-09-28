@@ -4,7 +4,7 @@ import { useState } from "react";
 import { studio, studioMenu } from "@/lib/site";
 import { SectionHeading } from "@/components/ui";
 import { Reveal } from "@/components/Reveal";
-import { useT } from "@/lib/i18n";
+import { useLang, useT } from "@/lib/i18n";
 import type { Locale } from "@/lib/locale";
 
 // Three example restaurants, mirroring the built-in looks in the app's designer.
@@ -53,35 +53,12 @@ const LOOKS = [
 
 const MENU_LOCALES: Locale[] = ["DE", "EN", "FR", "IT"];
 
-const icons: Record<string, React.ReactNode> = {
-  branding: (
-    <>
-      <circle cx="12" cy="12" r="9" strokeWidth="1.6" />
-      <circle cx="8.5" cy="10" r="1.3" fill="currentColor" stroke="none" />
-      <circle cx="12" cy="7.5" r="1.3" fill="currentColor" stroke="none" />
-      <circle cx="15.5" cy="10" r="1.3" fill="currentColor" stroke="none" />
-      <path d="M12 21c-1.5 0-2-1-2-2s1-2 2-2h2" strokeWidth="1.6" strokeLinecap="round" />
-    </>
-  ),
-  templates: (
-    <>
-      <rect x="4" y="4" width="16" height="16" rx="2.5" strokeWidth="1.6" />
-      <path d="M4 10h16M10 10v10" strokeWidth="1.6" />
-    </>
-  ),
+const icons = {
   ai: (
     <>
       <path d="M4 6h9M8.5 4v2M6 6c.8 3 3 5.5 6 6.5M11 6c-.8 3-3 5.5-6 6.5" strokeWidth="1.6" strokeLinecap="round" />
       <path d="M13 20l3.5-8 3.5 8M14.2 17.5h4.6" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
     </>
-  ),
-  dietary: (
-    <path
-      d="M5 19c0-8 5-13 14-14-1 9-6 14-14 14zM5 19l7-7"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
   ),
 };
 
@@ -185,89 +162,169 @@ function PhoneMenu({ look, menuLang }: { look: (typeof LOOKS)[number]; menuLang:
   );
 }
 
-function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+type Look = (typeof LOOKS)[number];
+
+/** The look's palette and heading font, as a designer would pin them on a moodboard. */
+function Palette({ look }: { look: Look }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition ${
-        active ? "bg-ink text-paper" : "bg-ink/5 text-muted hover:bg-ink/10 hover:text-ink"
-      }`}
-    >
-      {children}
-    </button>
+    <div className="flex items-center gap-4">
+      <div className="flex">
+        {[look.bg, look.surface, look.brand, look.text].map((c, i) => (
+          <span
+            key={i}
+            className="-ml-1.5 h-8 w-8 rounded-full border-2 border-paper shadow-sm transition-colors duration-500 first:ml-0"
+            style={{ background: c }}
+          />
+        ))}
+      </div>
+      <span
+        className="text-3xl leading-none text-ink transition-all duration-500"
+        style={{ fontFamily: look.heading }}
+        aria-hidden="true"
+      >
+        Aa
+      </span>
+      <span
+        className="h-8 w-8 border-2 border-ink/70 transition-all duration-500"
+        style={{ borderRadius: look.radius }}
+        aria-hidden="true"
+      />
+    </div>
   );
 }
 
 export function PageStudio() {
   const t = useT();
+  const { lang } = useLang();
   const [lookIndex, setLookIndex] = useState(0);
   const [menuLang, setMenuLang] = useState<Locale>("DE");
   const look = LOOKS[lookIndex];
 
+  // Each feature row doubles as a control for the phone preview.
+  const controls: Record<string, React.ReactNode> = {
+    branding: <Palette look={look} />,
+    templates: (
+      <div role="group" aria-label={t(studio.demo.look)} className="flex flex-wrap gap-2">
+        {LOOKS.map((l, i) => {
+          const active = i === lookIndex;
+          return (
+            <button
+              key={l.key}
+              type="button"
+              onClick={() => setLookIndex(i)}
+              aria-pressed={active}
+              className={`group inline-flex items-center gap-2.5 rounded-full border py-1.5 pl-1.5 pr-4 text-sm font-semibold transition ${
+                active ? "border-ink bg-ink text-paper" : "border-line text-ink-soft hover:border-ink/40 hover:text-ink"
+              }`}
+            >
+              <span
+                className="relative h-6 w-6 overflow-hidden rounded-full ring-1 ring-black/10"
+                style={{ background: l.bg }}
+              >
+                <span className="absolute inset-y-0 right-0 w-1/2" style={{ background: l.brand }} />
+              </span>
+              {l.venue}
+            </button>
+          );
+        })}
+      </div>
+    ),
+    ai: (
+      <div className="flex flex-wrap items-center gap-3">
+        <div
+          role="group"
+          aria-label={t(studio.demo.language)}
+          className="inline-flex rounded-full border border-line bg-paper-2/60 p-1"
+        >
+          {MENU_LOCALES.map((loc) => (
+            <button
+              key={loc}
+              type="button"
+              onClick={() => setMenuLang(loc)}
+              aria-pressed={loc === menuLang}
+              className={`rounded-full px-3.5 py-1 text-xs font-bold tracking-wide transition ${
+                loc === menuLang ? "bg-ink text-paper" : "text-muted hover:text-ink"
+              }`}
+            >
+              {loc}
+            </button>
+          ))}
+        </div>
+        <span
+          className={`inline-flex items-center gap-1.5 text-xs font-semibold transition-colors ${
+            menuLang === "DE" ? "text-muted" : "text-accent"
+          }`}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+            {icons.ai}
+          </svg>
+          {menuLang === "DE" ? t(studio.demo.original) : t(studio.demo.translated)}
+        </span>
+      </div>
+    ),
+    dietary: (
+      <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
+        <span className="inline-flex items-center gap-1 rounded-full bg-[#2f8f4e1f] px-2.5 py-1 text-[#2f8f4e]">
+          <Leaf /> {studioMenu.vegan[lang]}
+        </span>
+        <span className="inline-flex items-center gap-1 rounded-full bg-[#2f8f4e1f] px-2.5 py-1 text-[#2f8f4e]">
+          <Leaf /> {studioMenu.vegetarian[lang]}
+        </span>
+        {[1, 2, 3].map((n) => (
+          <span key={n} className="inline-flex items-center gap-0.5 rounded-full bg-[#e0482d1a] px-2 py-1 text-[#d13f25]">
+            {Array.from({ length: n }, (_, k) => (
+              <Chili key={k} />
+            ))}
+          </span>
+        ))}
+      </div>
+    ),
+  };
+
   return (
     <section id="designer" className="section-pad py-24 sm:py-32">
-      <div className="grid items-center gap-14 lg:grid-cols-[1fr_auto]">
-        <div>
-          <Reveal>
-            <SectionHeading eyebrow={t(studio.eyebrow)} title={t(studio.title)} intro={t(studio.intro)} />
-          </Reveal>
+      <div className="grid gap-x-20 gap-y-12 lg:grid-cols-[1fr_auto]">
+        <Reveal>
+          <SectionHeading eyebrow={t(studio.eyebrow)} title={t(studio.title)} intro={t(studio.intro)} />
+        </Reveal>
 
-          <div className="mt-10 grid gap-6 sm:grid-cols-2">
-            {studio.items.map((item, i) => (
-              <Reveal key={item.key} delay={(i % 2) * 0.08}>
-                <div className="h-full rounded-card border border-line bg-white/60 p-6">
-                  <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-accent-soft text-accent">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-                      {icons[item.key]}
-                    </svg>
-                  </span>
-                  <h3 className="display mt-4 text-lg text-ink">{t(item.title)}</h3>
-                  <p className="mt-1.5 text-sm leading-relaxed text-muted">{t(item.body)}</p>
-                </div>
-              </Reveal>
-            ))}
-          </div>
-        </div>
-
-        <Reveal y={40} delay={0.1}>
-          <div className="flex flex-col items-center gap-5">
-            <div className="flex flex-col items-center gap-2">
-              <span className="eyebrow text-muted">{t(studio.demo.look)}</span>
-              <div className="flex flex-wrap justify-center gap-1.5">
-                {LOOKS.map((l, i) => (
-                  <Chip key={l.key} active={i === lookIndex} onClick={() => setLookIndex(i)}>
-                    {l.venue}
-                  </Chip>
-                ))}
-              </div>
+        {/* Phone: second on mobile so the controls below sit right under it */}
+        <Reveal y={40} delay={0.1} className="lg:sticky lg:top-28 lg:row-span-2 lg:self-start">
+          <div className="relative flex flex-col items-center">
+            <div
+              className="pointer-events-none absolute left-1/2 top-1/2 h-[420px] w-[420px] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-25 blur-3xl transition-colors duration-700"
+              style={{ background: look.brand }}
+              aria-hidden="true"
+            />
+            <div className="relative">
+              <PhoneMenu look={look} menuLang={menuLang} />
             </div>
-
-            <PhoneMenu look={look} menuLang={menuLang} />
-
-            <div className="flex flex-col items-center gap-2">
-              <div className="flex items-center gap-1.5">
-                <span className="eyebrow mr-1 text-muted">{t(studio.demo.language)}</span>
-                {MENU_LOCALES.map((loc) => (
-                  <Chip key={loc} active={loc === menuLang} onClick={() => setMenuLang(loc)}>
-                    {loc}
-                  </Chip>
-                ))}
-              </div>
-              <span
-                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition ${
-                  menuLang === "DE" ? "bg-ink/5 text-muted" : "bg-accent-soft text-accent"
-                }`}
-              >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-                  {icons.ai}
-                </svg>
-                {menuLang === "DE" ? t(studio.demo.original) : t(studio.demo.translated)}
+            <p className="relative mt-5 flex items-center gap-2 text-xs font-semibold text-muted">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-accent" />
               </span>
-            </div>
+              {t(studio.demo.preview)}
+            </p>
           </div>
         </Reveal>
+
+        <ol className="border-b border-line">
+          {studio.items.map((item, i) => (
+            <li key={item.key} className="border-t border-line">
+              <Reveal delay={i * 0.06} className="grid grid-cols-[2.5rem_1fr] gap-x-4 py-7 sm:grid-cols-[3.5rem_1fr]">
+                <span className="display pt-1 text-sm tabular-nums text-accent">
+                  {String(i + 1).padStart(2, "0")}
+                </span>
+                <div>
+                  <h3 className="display text-2xl text-ink">{t(item.title)}</h3>
+                  <p className="mt-2 max-w-lg leading-relaxed text-muted">{t(item.body)}</p>
+                  <div className="mt-5">{controls[item.key]}</div>
+                </div>
+              </Reveal>
+            </li>
+          ))}
+        </ol>
       </div>
     </section>
   );

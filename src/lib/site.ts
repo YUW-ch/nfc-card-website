@@ -343,6 +343,7 @@ export const studio = {
     language: l("Language", "Sprache", "Langue", "Lingua"),
     original: l("Written in German", "Auf Deutsch verfasst", "Rédigé en allemand", "Scritto in tedesco"),
     translated: l("Translated by AI", "Von KI übersetzt", "Traduit par l'IA", "Tradotto dall'IA"),
+    preview: l("Live preview", "Live-Vorschau", "Aperçu en direct", "Anteprima dal vivo"),
   },
 };
 
