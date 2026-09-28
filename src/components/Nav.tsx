@@ -98,7 +98,7 @@ function Wordmark() {
         priority
         className="h-8 w-8"
       />
-      <span className="font-display text-2xl font-bold tracking-tight text-ink">
+      <span className="font-[family-name:var(--font-bricolage)] text-2xl font-bold tracking-tight text-ink">
         {BRAND}
       </span>
     </Link>

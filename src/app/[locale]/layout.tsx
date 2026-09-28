@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Bricolage_Grotesque, Hanken_Grotesk } from "next/font/google";
+import localFont from "next/font/local";
 import { notFound } from "next/navigation";
 import { Analytics } from "@vercel/analytics/next";
 import "../globals.css";
@@ -19,6 +20,15 @@ const body = Hanken_Grotesk({
   variable: "--font-hanken",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
+});
+
+// Title font, self-hosted (Literata, OFL). Variable weight.
+const serif = localFont({
+  variable: "--font-serif",
+  src: "../../fonts/literata-latin-wght.woff2",
+  weight: "200 900",
+  display: "swap",
+  fallback: ["Iowan Old Style", "Georgia", "serif"],
 });
 
 export function generateStaticParams() {
@@ -63,7 +73,7 @@ export default async function RootLayout({
   return (
     <html
       lang={localeToSlug(loc)}
-      className={`${display.variable} ${body.variable} h-full`}
+      className={`${display.variable} ${body.variable} ${serif.variable} h-full`}
     >
       <body className="grain min-h-full flex flex-col">
         <SiteJsonLd locale={loc} />

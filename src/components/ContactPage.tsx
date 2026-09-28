@@ -10,15 +10,15 @@ export function ContactPage() {
   const c = ui.contact;
 
   return (
-    <section className="section-pad py-16 sm:py-24">
-      <div className="mx-auto max-w-2xl">
+    <section className="section-pad py-16 sm:py-24 lg:flex lg:min-h-[calc(100svh-8rem)] lg:flex-col lg:justify-center lg:py-20">
+      <div className="mx-auto w-full max-w-2xl">
         <Reveal>
           <span className="eyebrow text-accent">{t(c.eyebrow)}</span>
-          <h1 className="display mt-4 text-4xl text-ink sm:text-5xl">{t(c.title)}</h1>
-          <p className="mt-5 text-lg leading-relaxed text-muted">{t(c.intro)}</p>
+          <h1 className="display mt-4 text-4xl text-ink sm:text-5xl lg:mt-6">{t(c.title)}</h1>
+          <p className="mt-5 text-lg leading-relaxed text-muted lg:mt-8 lg:text-xl">{t(c.intro)}</p>
         </Reveal>
         <Reveal delay={0.05}>
-          <div className="mt-10">
+          <div className="mt-10 lg:mt-14">
             <ContactForm />
           </div>
         </Reveal>
